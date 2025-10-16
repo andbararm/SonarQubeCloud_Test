@@ -39,6 +39,7 @@ jobs:
       - name: Set ENV Variable
         run: |
           echo "CMAKE_EXPORT_COMPILE_COMMANDS=1" >> "$GITHUB_ENV"
+          echo "SONAR_TOKEN=9bce4809dcaedc188635c1dc7bdb305ec4157c71" >> "$GITHUB_ENV"
    
       - name: Build
         run: |
