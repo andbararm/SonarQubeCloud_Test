@@ -121,9 +121,10 @@
      -:   117:  app_initialize();                     // Initialize application
      1:   118:  osKernelStart();                      // Start thread execution
      -:   119:
- #####:   120:  for (;;) {}
+     1:   120:  for (;;) {}
      -:   121:}
      -:   122:
      -:   123:
+
 
 
