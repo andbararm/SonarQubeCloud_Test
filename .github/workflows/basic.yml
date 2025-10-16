@@ -35,14 +35,15 @@ jobs:
 
       - name: Activate Arm tool license
         uses: ARM-software/cmsis-actions/armlm@v1
-  
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v4
 
+      - name: Set ENV Variable
+        run: |
+          echo "CMAKE_EXPORT_COMPILE_COMMANDS" >> "$GITHUB_ENV"
+   
       - name: Build
         run: |
           echo "Building get started example ..."
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cbuild get_started.csolution.yml --packs --update-rte --context .debug+avh 
+          cbuild get_started.csolution.yml --packs --update-rte --context .debug+avh 
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
