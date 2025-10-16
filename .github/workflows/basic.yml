@@ -46,7 +46,7 @@ jobs:
           cbuild get_started.csolution.yml --packs --update-rte --context .debug+avh 
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: sonarsource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }} # Put the name of your token here
         with:
