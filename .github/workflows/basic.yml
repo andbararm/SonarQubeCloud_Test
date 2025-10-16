@@ -46,6 +46,10 @@ jobs:
           echo "Building get started example ..."
           cbuild get_started.csolution.yml --packs --update-rte --context .debug+avh 
 
+      - name: List Dir
+        run: |
+          ls -l
+
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v6
         env:
