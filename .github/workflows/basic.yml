@@ -48,7 +48,7 @@ jobs:
 
       - name: List Dir
         run: |
-          ls -la ./tmp/Project
+          ls -la ./tmp/Project/avh
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v6
