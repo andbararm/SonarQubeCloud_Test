@@ -52,8 +52,8 @@
      -:    48: *----------------------------------------------------------------------------*/
      -:    49:void SystemCoreClockUpdate (void)
      -:    50:{
- #####:    51:  SystemCoreClock = SYSTEM_CLOCK;
- #####:    52:}
+     1:    51:  SystemCoreClock = SYSTEM_CLOCK;
+     1:    52:}
      -:    53:
      -:    54:/*----------------------------------------------------------------------------
      -:    55:  System initialization function
