@@ -117,9 +117,9 @@ int main (void) {
   app_initialize();                     // Initialize application
   osKernelStart();                      // Start thread execution
 
-  //for (;;) {}
-LOOP:
-  goto LOOP;
+  for (;;) {}
+//LOOP:
+//  goto LOOP;
 }
 
 
