@@ -38,7 +38,7 @@ jobs:
 
       - name: Set ENV Variable
         run: |
-          echo "CMAKE_EXPORT_COMPILE_COMMANDS" >> "$GITHUB_ENV"
+          echo "CMAKE_EXPORT_COMPILE_COMMANDS=1" >> "$GITHUB_ENV"
    
       - name: Build
         run: |
