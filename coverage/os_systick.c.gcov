@@ -1,0 +1,152 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS/6.2.0/CMSIS/RTOS2/Source/os_systick.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/**************************************************************************//**
+     -:     2: * @file     os_systick.c
+     -:     3: * @brief    CMSIS OS Tick SysTick implementation
+     -:     4: * @version  V1.0.5
+     -:     5: * @date     16. October 2023
+     -:     6: ******************************************************************************/
+     -:     7:/*
+     -:     8: * Copyright (c) 2017-2023 ARM Limited. All rights reserved.
+     -:     9: *
+     -:    10: * SPDX-License-Identifier: Apache-2.0
+     -:    11: *
+     -:    12: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:    13: * not use this file except in compliance with the License.
+     -:    14: * You may obtain a copy of the License at
+     -:    15: *
+     -:    16: * www.apache.org/licenses/LICENSE-2.0
+     -:    17: *
+     -:    18: * Unless required by applicable law or agreed to in writing, software
+     -:    19: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    20: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    21: * See the License for the specific language governing permissions and
+     -:    22: * limitations under the License.
+     -:    23: */
+     -:    24:
+     -:    25:#include "os_tick.h"
+     -:    26:
+     -:    27://lint -emacro((923,9078),SCB,SysTick) "cast from unsigned long to pointer"
+     -:    28:
+     -:    29:#if defined(_RTE_)
+     -:    30:#include "RTE_Components.h"
+     -:    31:#elif !defined(CMSIS_device_header)
+     -:    32:#error "CMSIS_device_header must be defined to point to CMSIS device header"
+     -:    33:#endif
+     -:    34:
+     -:    35:#include CMSIS_device_header
+     -:    36:
+     -:    37:#ifdef  SysTick
+     -:    38:
+     -:    39:#ifndef SYSTICK_IRQ_PRIORITY
+     -:    40:#define SYSTICK_IRQ_PRIORITY    0xFFU
+     -:    41:#endif
+     -:    42:
+     -:    43:static uint8_t PendST __attribute__((section(".bss.os")));
+     -:    44:
+     -:    45:// Setup OS Tick.
+     -:    46:__WEAK int32_t OS_Tick_Setup (uint32_t freq, IRQHandler_t handler) {
+     -:    47:  uint32_t load;
+     -:    48:  (void)handler;
+     -:    49:
+     1:    50:  if (freq == 0U) {
+     -:    51:    //lint -e{904} "Return statement before end of function"
+     -:    52:    return (-1);
+     -:    53:  }
+     -:    54:
+     1:    55:  load = (SystemCoreClock / freq) - 1U;
+     1:    56:  if (load > 0x00FFFFFFU) {
+     -:    57:    //lint -e{904} "Return statement before end of function"
+     -:    58:    return (-1);
+     -:    59:  }
+     -:    60:
+     -:    61:  // Set SysTick Interrupt Priority
+     -:    62:#if   ((defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) || \
+     -:    63:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)) || \
+     -:    64:       (defined(__CORTEX_M)             && (__CORTEX_M             == 7U)))
+     -:    65:  SCB->SHPR[11] = SYSTICK_IRQ_PRIORITY;
+     -:    66:#elif  (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0))
+     -:    67:  SCB->SHPR[1] |= ((uint32_t)SYSTICK_IRQ_PRIORITY << 24);
+     -:    68:#elif ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) || \
+     -:    69:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)))
+     1:    70:  SCB->SHPR[11]  = SYSTICK_IRQ_PRIORITY;
+     -:    71:#elif  (defined(__ARM_ARCH_6M__)        && (__ARM_ARCH_6M__        != 0))
+     -:    72:  SCB->SHPR[1]  |= ((uint32_t)SYSTICK_IRQ_PRIORITY << 24);
+     -:    73:#else
+     -:    74:#error "Unknown ARM Core!"
+     -:    75:#endif
+     -:    76:
+     1:    77:  SysTick->CTRL =  SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk;
+     1:    78:  SysTick->LOAD =  load;
+     1:    79:  SysTick->VAL  =  0U;
+     -:    80:
+     1:    81:  PendST = 0U;
+     -:    82:
+     -:    83:  return (0);
+ #####:    84:}
+     -:    85:
+     -:    86:/// Enable OS Tick.
+     -:    87:__WEAK void OS_Tick_Enable (void) {
+     -:    88:
+     1:    89:  if (PendST != 0U) {
+ #####:    90:    PendST = 0U;
+ #####:    91:    SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+     -:    92:  }
+     -:    93:
+     1:    94:  SysTick->CTRL |=  SysTick_CTRL_ENABLE_Msk;
+     1:    95:}
+     -:    96:
+     -:    97:/// Disable OS Tick.
+ #####:    98:__WEAK void OS_Tick_Disable (void) {
+     -:    99:
+ #####:   100:  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+     -:   101:
+ #####:   102:  if ((SCB->ICSR & SCB_ICSR_PENDSTSET_Msk) != 0U) {
+ #####:   103:    SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
+ #####:   104:    PendST = 1U;
+     -:   105:  }
+ #####:   106:}
+     -:   107:
+     -:   108:// Acknowledge OS Tick IRQ.
+  3888:   109:__WEAK void OS_Tick_AcknowledgeIRQ (void) {
+  3888:   110:  (void)SysTick->CTRL;
+  3888:   111:}
+     -:   112:
+     -:   113:// Get OS Tick IRQ number.
+     -:   114:__WEAK int32_t  OS_Tick_GetIRQn (void) {
+     1:   115:  return ((int32_t)SysTick_IRQn);
+     -:   116:}
+     -:   117:
+     -:   118:// Get OS Tick clock.
+     -:   119:__WEAK uint32_t OS_Tick_GetClock (void) {
+     -:   120:  return (SystemCoreClock);
+     -:   121:}
+     -:   122:
+     -:   123:// Get OS Tick interval.
+     -:   124:__WEAK uint32_t OS_Tick_GetInterval (void) {
+     -:   125:  return (SysTick->LOAD + 1U);
+     -:   126:}
+     -:   127:
+     -:   128:// Get OS Tick count value.
+     -:   129:__WEAK uint32_t OS_Tick_GetCount (void) {
+     -:   130:  uint32_t val;
+     -:   131:  uint32_t count;
+     -:   132:
+     -:   133:  val = SysTick->VAL;
+ #####:   134:  if (val != 0U) {
+ #####:   135:    count = (SysTick->LOAD - val) + 1U;
+     -:   136:  } else {
+     -:   137:    count = 0U;
+     -:   138:  }
+     -:   139:
+ #####:   140:  return (count);
+     -:   141:}
+     -:   142:
+     -:   143:// Get OS Tick overflow status.
+     -:   144:__WEAK uint32_t OS_Tick_GetOverflow (void) {
+     -:   145:  return ((SCB->ICSR & SCB_ICSR_PENDSTSET_Msk) >> SCB_ICSR_PENDSTSET_Pos);
+     -:   146:}
+     -:   147:
+     -:   148:#endif  // SysTick

@@ -1,0 +1,332 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_lib.h
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       RTX Library definitions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#ifndef RTX_LIB_H_
+     -:    27:#define RTX_LIB_H_
+     -:    28:
+     -:    29:#include <string.h>
+     -:    30:#include "rtx_def.h"                    // RTX Configuration definitions
+     -:    31:#include "rtx_core_c.h"                 // Cortex core definitions
+     -:    32:#ifdef RTX_TZ_CONTEXT
+     -:    33:#include "tz_context.h"                 // TrustZone Context API
+     -:    34:#endif
+     -:    35:#include "os_tick.h"                    // CMSIS OS Tick API
+     -:    36:#include "cmsis_os2.h"                  // CMSIS RTOS API
+     -:    37:#include "rtx_os.h"                     // RTX OS definitions
+     -:    38:#include "rtx_evr.h"                    // RTX Event Recorder definitions
+     -:    39:
+     -:    40:
+     -:    41://  ==== Library defines ====
+     -:    42:
+     -:    43:#define os_thread_t         osRtxThread_t
+     -:    44:#define os_timer_t          osRtxTimer_t
+     -:    45:#define os_timer_finfo_t    osRtxTimerFinfo_t
+     -:    46:#define os_event_flags_t    osRtxEventFlags_t
+     -:    47:#define os_mutex_t          osRtxMutex_t
+     -:    48:#define os_semaphore_t      osRtxSemaphore_t
+     -:    49:#define os_mp_info_t        osRtxMpInfo_t
+     -:    50:#define os_memory_pool_t    osRtxMemoryPool_t
+     -:    51:#define os_message_t        osRtxMessage_t
+     -:    52:#define os_message_queue_t  osRtxMessageQueue_t
+     -:    53:#define os_object_t         osRtxObject_t
+     -:    54:
+     -:    55:
+     -:    56://  ==== Library sections ====
+     -:    57:
+     -:    58:#if (defined(__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050))
+     -:    59:// Referenced through linker
+     -:    60://lint -esym(528,  __os_thread_cb_start__,    __os_thread_cb_length__)
+     -:    61://lint -esym(528,  __os_timer_cb_start__,     __os_timer_cb_length__)
+     -:    62://lint -esym(528,  __os_evflags_cb_start__,   __os_evflags_cb_length__)
+     -:    63://lint -esym(528,  __os_mutex_cb_start__,     __os_mutex_cb_length__)
+     -:    64://lint -esym(528,  __os_semaphore_cb_start__, __os_semaphore_cb_length__)
+     -:    65://lint -esym(528,  __os_mempool_cb_start__,   __os_mempool_cb_length__)
+     -:    66://lint -esym(528,  __os_msgqueue_cb_start__,  __os_msgqueue_cb_length__)
+     -:    67:// Accessed through linker
+     -:    68://lint -esym(551,  __os_thread_cb_start__,    __os_thread_cb_length__)
+     -:    69://lint -esym(551,  __os_timer_cb_start__,     __os_timer_cb_length__)
+     -:    70://lint -esym(551,  __os_evflags_cb_start__,   __os_evflags_cb_length__)
+     -:    71://lint -esym(551,  __os_mutex_cb_start__,     __os_mutex_cb_length__)
+     -:    72://lint -esym(551,  __os_semaphore_cb_start__, __os_semaphore_cb_length__)
+     -:    73://lint -esym(551,  __os_mempool_cb_start__,   __os_mempool_cb_length__)
+     -:    74://lint -esym(551,  __os_msgqueue_cb_start__,  __os_msgqueue_cb_length__)
+     -:    75:// Initialized through linker
+     -:    76://lint -esym(728,  __os_thread_cb_start__,    __os_thread_cb_length__)
+     -:    77://lint -esym(728,  __os_timer_cb_start__,     __os_timer_cb_length__)
+     -:    78://lint -esym(728,  __os_evflags_cb_start__,   __os_evflags_cb_length__)
+     -:    79://lint -esym(728,  __os_mutex_cb_start__,     __os_mutex_cb_length__)
+     -:    80://lint -esym(728,  __os_semaphore_cb_start__, __os_semaphore_cb_length__)
+     -:    81://lint -esym(728,  __os_mempool_cb_start__,   __os_mempool_cb_length__)
+     -:    82://lint -esym(728,  __os_msgqueue_cb_start__,  __os_msgqueue_cb_length__)
+     -:    83:// Global scope
+     -:    84://lint -esym(9003, __os_thread_cb_start__,    __os_thread_cb_length__)
+     -:    85://lint -esym(9003, __os_timer_cb_start__,     __os_timer_cb_length__)
+     -:    86://lint -esym(9003, __os_evflags_cb_start__,   __os_evflags_cb_length__)
+     -:    87://lint -esym(9003, __os_mutex_cb_start__,     __os_mutex_cb_length__)
+     -:    88://lint -esym(9003, __os_semaphore_cb_start__, __os_semaphore_cb_length__)
+     -:    89://lint -esym(9003, __os_mempool_cb_start__,   __os_mempool_cb_length__)
+     -:    90://lint -esym(9003, __os_msgqueue_cb_start__,  __os_msgqueue_cb_length__)
+     -:    91:static const uint32_t __os_thread_cb_start__     __attribute__((weakref(".bss.os.thread.cb$$Base")));
+     -:    92:static const uint32_t __os_thread_cb_length__    __attribute__((weakref(".bss.os.thread.cb$$Length")));
+     -:    93:static const uint32_t __os_timer_cb_start__      __attribute__((weakref(".bss.os.timer.cb$$Base")));
+     -:    94:static const uint32_t __os_timer_cb_length__     __attribute__((weakref(".bss.os.timer.cb$$Length")));
+     -:    95:static const uint32_t __os_evflags_cb_start__    __attribute__((weakref(".bss.os.evflags.cb$$Base")));
+     -:    96:static const uint32_t __os_evflags_cb_length__   __attribute__((weakref(".bss.os.evflags.cb$$Length")));
+     -:    97:static const uint32_t __os_mutex_cb_start__      __attribute__((weakref(".bss.os.mutex.cb$$Base")));
+     -:    98:static const uint32_t __os_mutex_cb_length__     __attribute__((weakref(".bss.os.mutex.cb$$Length")));
+     -:    99:static const uint32_t __os_semaphore_cb_start__  __attribute__((weakref(".bss.os.semaphore.cb$$Base")));
+     -:   100:static const uint32_t __os_semaphore_cb_length__ __attribute__((weakref(".bss.os.semaphore.cb$$Length")));
+     -:   101:static const uint32_t __os_mempool_cb_start__    __attribute__((weakref(".bss.os.mempool.cb$$Base")));
+     -:   102:static const uint32_t __os_mempool_cb_length__   __attribute__((weakref(".bss.os.mempool.cb$$Length")));
+     -:   103:static const uint32_t __os_msgqueue_cb_start__   __attribute__((weakref(".bss.os.msgqueue.cb$$Base")));
+     -:   104:static const uint32_t __os_msgqueue_cb_length__  __attribute__((weakref(".bss.os.msgqueue.cb$$Length")));
+     -:   105:#else
+     -:   106:extern const uint32_t __os_thread_cb_start__     __attribute__((weak));
+     -:   107:extern const uint32_t __os_thread_cb_length__    __attribute__((weak));
+     -:   108:extern const uint32_t __os_timer_cb_start__      __attribute__((weak));
+     -:   109:extern const uint32_t __os_timer_cb_length__     __attribute__((weak));
+     -:   110:extern const uint32_t __os_evflags_cb_start__    __attribute__((weak));
+     -:   111:extern const uint32_t __os_evflags_cb_length__   __attribute__((weak));
+     -:   112:extern const uint32_t __os_mutex_cb_start__      __attribute__((weak));
+     -:   113:extern const uint32_t __os_mutex_cb_length__     __attribute__((weak));
+     -:   114:extern const uint32_t __os_semaphore_cb_start__  __attribute__((weak));
+     -:   115:extern const uint32_t __os_semaphore_cb_length__ __attribute__((weak));
+     -:   116:extern const uint32_t __os_mempool_cb_start__    __attribute__((weak));
+     -:   117:extern const uint32_t __os_mempool_cb_length__   __attribute__((weak));
+     -:   118:extern const uint32_t __os_msgqueue_cb_start__   __attribute__((weak));
+     -:   119:extern const uint32_t __os_msgqueue_cb_length__  __attribute__((weak));
+     -:   120:#endif
+     -:   121:
+     -:   122:
+     -:   123://  ==== Inline functions ====
+     -:   124:
+     -:   125:// Thread ID
+     -:   126:__STATIC_INLINE os_thread_t *osRtxThreadId (osThreadId_t thread_id) {
+     -:   127:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   128:  return ((os_thread_t *)thread_id);
+     -:   129:}
+     -:   130:// Timer ID
+     -:   131:__STATIC_INLINE os_timer_t *osRtxTimerId (osTimerId_t timer_id) {
+     -:   132:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   133:  return ((os_timer_t *)timer_id);
+     -:   134:}
+     -:   135:// Event Flags ID
+     -:   136:__STATIC_INLINE os_event_flags_t *osRtxEventFlagsId (osEventFlagsId_t ef_id) {
+     -:   137:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   138:  return ((os_event_flags_t *)ef_id);
+     -:   139:}
+     -:   140:// Mutex ID
+     -:   141:__STATIC_INLINE os_mutex_t *osRtxMutexId (osMutexId_t mutex_id) {
+     -:   142:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   143:  return ((os_mutex_t *)mutex_id);
+     -:   144:}
+     -:   145:// Semaphore ID
+     -:   146:__STATIC_INLINE os_semaphore_t *osRtxSemaphoreId (osSemaphoreId_t semaphore_id) {
+     -:   147:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   148:  return ((os_semaphore_t *)semaphore_id);
+     -:   149:}
+     -:   150:// Memory Pool ID
+     -:   151:__STATIC_INLINE os_memory_pool_t *osRtxMemoryPoolId (osMemoryPoolId_t mp_id) {
+     -:   152:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   153:  return ((os_memory_pool_t *)mp_id);
+     -:   154:}
+     -:   155:// Message Queue ID
+     -:   156:__STATIC_INLINE os_message_queue_t *osRtxMessageQueueId (osMessageQueueId_t mq_id) {
+     -:   157:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 2]
+     -:   158:  return ((os_message_queue_t *)mq_id);
+     -:   159:}
+     -:   160:
+     -:   161:// Generic Object
+     -:   162:__STATIC_INLINE os_object_t *osRtxObject (void *object) {
+     -:   163:  //lint -e{9079} -e{9087} "cast from pointer to void to pointer to object type" [MISRA Note 3]
+     -:   164:  return ((os_object_t *)object);
+     -:   165:}
+     -:   166:
+     -:   167:// Thread Object
+     -:   168:__STATIC_INLINE os_thread_t *osRtxThreadObject (os_object_t *object) {
+     -:   169:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   170:  return ((os_thread_t *)object);
+     -:   171:}
+     -:   172:// Timer Object
+     -:   173:__STATIC_INLINE os_timer_t *osRtxTimerObject (os_object_t *object) {
+     -:   174:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   175:  return ((os_timer_t *)object);
+     -:   176:}
+     -:   177:// Event Flags Object
+     -:   178:__STATIC_INLINE os_event_flags_t *osRtxEventFlagsObject (os_object_t *object) {
+     -:   179:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   180:  return ((os_event_flags_t *)object);
+     -:   181:}
+     -:   182:// Mutex Object
+     -:   183:__STATIC_INLINE os_mutex_t *osRtxMutexObject (os_object_t *object) {
+     -:   184:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   185:  return ((os_mutex_t *)object);
+     -:   186:}
+     -:   187:// Semaphore Object
+     -:   188:__STATIC_INLINE os_semaphore_t *osRtxSemaphoreObject (os_object_t *object) {
+     -:   189:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   190:  return ((os_semaphore_t *)object);
+     -:   191:}
+     -:   192:// Memory Pool Object
+     -:   193:__STATIC_INLINE os_memory_pool_t *osRtxMemoryPoolObject (os_object_t *object) {
+     -:   194:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   195:  return ((os_memory_pool_t *)object);
+     -:   196:}
+     -:   197:// Message Queue Object
+     -:   198:__STATIC_INLINE os_message_queue_t *osRtxMessageQueueObject (os_object_t *object) {
+     -:   199:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   200:  return ((os_message_queue_t *)object);
+     -:   201:}
+     -:   202:// Message Object
+     -:   203:__STATIC_INLINE os_message_t *osRtxMessageObject (os_object_t *object) {
+     -:   204:  //lint -e{740} -e{826} -e{9087} "cast from pointer to generic object to specific object" [MISRA Note 4]
+     -:   205:  return ((os_message_t *)object);
+     -:   206:}
+     -:   207:
+     -:   208:// Kernel State
+     -:   209:__STATIC_INLINE osKernelState_t osRtxKernelState (void) {
+     -:   210:  //lint -e{9030} -e{9034} "cast to enum"
+    19:   211:  return ((osKernelState_t)(osRtxInfo.kernel.state));
+     -:   212:}
+     -:   213:
+     -:   214:// Thread State
+     -:   215:__STATIC_INLINE osThreadState_t osRtxThreadState (const os_thread_t *thread) {
+ #####:   216:  uint8_t state = thread->state & osRtxThreadStateMask;
+     -:   217:  //lint -e{9030} -e{9034} "cast to enum"
+ #####:   218:  return ((osThreadState_t)state);
+     -:   219:}
+     -:   220:
+     -:   221:// Thread Priority
+     -:   222:__STATIC_INLINE osPriority_t osRtxThreadPriority (const os_thread_t *thread) {
+     -:   223:  //lint -e{9030} -e{9034} "cast to enum"
+ #####:   224:  return ((osPriority_t)thread->priority);
+     -:   225:}
+     -:   226:
+     -:   227:// Kernel Get State
+     -:   228:__STATIC_INLINE uint8_t osRtxKernelGetState (void) {
+ #####:   229:  return osRtxInfo.kernel.state;
+     -:   230:}
+     -:   231:
+     -:   232:// Thread Get/Set Running
+     -:   233:__STATIC_INLINE os_thread_t *osRtxThreadGetRunning (void) {
+ #####:   234:  return osRtxInfo.thread.run.curr;
+     -:   235:}
+     -:   236:__STATIC_INLINE void osRtxThreadSetRunning (os_thread_t *thread) {
+ #####:   237:  osRtxInfo.thread.run.curr = thread;
+     -:   238:}
+     -:   239:
+     -:   240:
+     -:   241://  ==== Library functions ====
+     -:   242:
+     -:   243:// Kernel Library functions
+     -:   244:extern void         osRtxKernelBeforeInit  (void);
+     -:   245:
+     -:   246:// Thread Library functions
+     -:   247:extern void         osRtxThreadListPut     (os_object_t *object, os_thread_t *thread);
+     -:   248:extern os_thread_t *osRtxThreadListGet     (os_object_t *object);
+     -:   249:extern void         osRtxThreadListSort    (os_thread_t *thread);
+     -:   250:extern void         osRtxThreadListRemove  (os_thread_t *thread);
+     -:   251:extern void         osRtxThreadReadyPut    (os_thread_t *thread);
+     -:   252://lint -esym(759,osRtxThreadDelayRemove)    "Prototype in header"
+     -:   253://lint -esym(765,osRtxThreadDelayRemove)    "Global scope"
+     -:   254:extern void         osRtxThreadDelayRemove (os_thread_t *thread);
+     -:   255:extern void         osRtxThreadDelayTick   (void);
+     -:   256:extern uint32_t    *osRtxThreadRegPtr      (const os_thread_t *thread);
+     -:   257:extern void         osRtxThreadSwitch      (os_thread_t *thread);
+     -:   258:extern void         osRtxThreadDispatch    (os_thread_t *thread);
+     -:   259:extern void         osRtxThreadWaitExit    (os_thread_t *thread, uint32_t ret_val, bool_t dispatch);
+     -:   260:extern bool_t       osRtxThreadWaitEnter   (uint8_t state, uint32_t timeout);
+     -:   261:#ifdef RTX_STACK_CHECK
+     -:   262:extern bool_t       osRtxThreadStackCheck  (const os_thread_t *thread);
+     -:   263:#endif
+     -:   264:#ifdef RTX_THREAD_WATCHDOG
+     -:   265://lint -esym(759,osRtxThreadWatchdogRemove) "Prototype in header"
+     -:   266://lint -esym(765,osRtxThreadWatchdogRemove) "Global scope"
+     -:   267:extern void         osRtxThreadWatchdogRemove(const os_thread_t *thread);
+     -:   268:extern void         osRtxThreadWatchdogTick  (void);
+     -:   269:#endif
+     -:   270://lint -esym(759,osRtxThreadJoinWakeup)     "Prototype in header"
+     -:   271://lint -esym(765,osRtxThreadJoinWakeup)     "Global scope"
+     -:   272:extern void         osRtxThreadJoinWakeup  (const os_thread_t *thread);
+     -:   273://lint -esym(759,osRtxThreadDestroy)        "Prototype in header"
+     -:   274://lint -esym(765,osRtxThreadDestroy)        "Global scope"
+     -:   275:extern void         osRtxThreadDestroy     (os_thread_t *thread);
+     -:   276:extern void         osRtxThreadBeforeFree  (os_thread_t *thread);
+     -:   277:extern bool_t       osRtxThreadStartup     (void);
+     -:   278:
+     -:   279:// Timer Library functions
+     -:   280:extern int32_t osRtxTimerSetup       (void);
+     -:   281:extern void    osRtxTimerThread      (void *argument);
+     -:   282:#ifdef RTX_SAFETY_CLASS
+     -:   283:extern void    osRtxTimerDeleteClass (uint32_t safety_class, uint32_t mode);
+     -:   284:#endif
+     -:   285:
+     -:   286:// Mutex Library functions
+     -:   287:extern void osRtxMutexOwnerRelease (os_mutex_t *mutex_list);
+     -:   288:extern void osRtxMutexOwnerRestore (const os_mutex_t *mutex, const os_thread_t *thread_wakeup);
+     -:   289:#ifdef RTX_SAFETY_CLASS
+     -:   290:extern void osRtxMutexDeleteClass  (uint32_t safety_class, uint32_t mode);
+     -:   291:#endif
+     -:   292:
+     -:   293:// Semaphore Library functions
+     -:   294:#ifdef RTX_SAFETY_CLASS
+     -:   295:extern void osRtxSemaphoreDeleteClass (uint32_t safety_class, uint32_t mode);
+     -:   296:#endif
+     -:   297:
+     -:   298:// Event Flags Library functions
+     -:   299:#ifdef RTX_SAFETY_CLASS
+     -:   300:extern void osRtxEventFlagsDeleteClass(uint32_t safety_class, uint32_t mode);
+     -:   301:#endif
+     -:   302:
+     -:   303:// Memory Heap Library functions
+     -:   304:extern uint32_t osRtxMemoryInit (void *mem, uint32_t size);
+     -:   305:extern void    *osRtxMemoryAlloc(void *mem, uint32_t size, uint32_t type);
+     -:   306:extern uint32_t osRtxMemoryFree (void *mem, void *block);
+     -:   307:
+     -:   308:// Memory Pool Library functions
+     -:   309:extern uint32_t   osRtxMemoryPoolInit       (os_mp_info_t *mp_info, uint32_t block_count, uint32_t block_size, void *block_mem);
+     -:   310:extern void      *osRtxMemoryPoolAlloc      (os_mp_info_t *mp_info);
+     -:   311:extern osStatus_t osRtxMemoryPoolFree       (os_mp_info_t *mp_info, void *block);
+     -:   312:#ifdef RTX_SAFETY_CLASS
+     -:   313:extern void       osRtxMemoryPoolDeleteClass(uint32_t safety_class, uint32_t mode);
+     -:   314:#endif
+     -:   315:
+     -:   316:// Message Queue Library functions
+     -:   317:extern int32_t osRtxMessageQueueTimerSetup (void);
+     -:   318:#ifdef RTX_SAFETY_CLASS
+     -:   319:extern void    osRtxMessageQueueDeleteClass(uint32_t safety_class, uint32_t mode);
+     -:   320:#endif
+     -:   321:
+     -:   322:// System Library functions
+     -:   323:extern void osRtxTick_Handler   (void);
+     -:   324:extern void osRtxPendSV_Handler (void);
+     -:   325:extern void osRtxPostProcess    (os_object_t *object);
+     -:   326:
+     -:   327:
+     -:   328:#endif  // RTX_LIB_H_

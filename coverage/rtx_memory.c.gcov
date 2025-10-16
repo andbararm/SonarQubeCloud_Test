@@ -1,0 +1,222 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_memory.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2018 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       Memory functions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#include "rtx_lib.h"
+     -:    27:
+     -:    28:
+     -:    29://  Memory Pool Header structure
+     -:    30:typedef struct {
+     -:    31:  uint32_t size;                // Memory Pool size
+     -:    32:  uint32_t used;                // Used Memory
+     -:    33:} mem_head_t;
+     -:    34:
+     -:    35://  Memory Block Header structure
+     -:    36:typedef struct mem_block_s {
+     -:    37:  struct mem_block_s *next;     // Next Memory Block in list
+     -:    38:  uint32_t            info;     // Block Info or max used Memory (in last block)
+     -:    39:} mem_block_t;
+     -:    40:
+     -:    41://  Memory Block Info: Length = <31:2>:'00', Type = <1:0>
+     -:    42:#define MB_INFO_LEN_MASK        0xFFFFFFFCU     // Length mask
+     -:    43:#define MB_INFO_TYPE_MASK       0x00000003U     // Type mask
+     -:    44:
+     -:    45://  Memory Head Pointer
+     -:    46:__STATIC_INLINE mem_head_t *MemHeadPtr (void *mem) {
+     -:    47:  //lint -e{9079} -e{9087} "conversion from pointer to void to pointer to other type" [MISRA Note 6]
+     -:    48:  return ((mem_head_t *)mem);
+     -:    49:}
+     -:    50:
+     -:    51://  Memory Block Pointer
+     -:    52:__STATIC_INLINE mem_block_t *MemBlockPtr (void *mem, uint32_t offset) {
+     -:    53:  uint32_t     addr;
+     -:    54:  mem_block_t *ptr;
+     -:    55:
+     -:    56:  //lint --e{923} --e{9078} "cast between pointer and unsigned int" [MISRA Note 8]
+     7:    57:  addr = (uint32_t)mem + offset;
+     -:    58:  ptr  = (mem_block_t *)addr;
+     -:    59:
+     -:    60:  return ptr;
+     -:    61:}
+     -:    62:
+     -:    63:
+     -:    64://  ==== Library functions ====
+     -:    65:
+     -:    66:/// Initialize Memory Pool with variable block size.
+     -:    67:/// \param[in]  mem             pointer to memory pool.
+     -:    68:/// \param[in]  size            size of a memory pool in bytes.
+     -:    69:/// \return 1 - success, 0 - failure.
+     4:    70:__WEAK uint32_t osRtxMemoryInit (void *mem, uint32_t size) {
+     -:    71:  mem_head_t  *head;
+     -:    72:  mem_block_t *ptr;
+     -:    73:
+     -:    74:  // Check parameters
+     -:    75:  //lint -e{923} "cast from pointer to unsigned int" [MISRA Note 7]
+     4:    76:  if ((mem == NULL) || (((uint32_t)mem & 7U) != 0U) || ((size & 7U) != 0U) ||
+     -:    77:      (size < (sizeof(mem_head_t) + (2U*sizeof(mem_block_t))))) {
+     3:    78:    EvrRtxMemoryInit(mem, size, 0U);
+     -:    79:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:    80:    return 0U;
+     -:    81:  }
+     -:    82:
+     -:    83:  // Initialize memory pool header
+     -:    84:  head = MemHeadPtr(mem);
+     1:    85:  head->size = size;
+     1:    86:  head->used = sizeof(mem_head_t) + sizeof(mem_block_t);
+     -:    87:
+     -:    88:  // Initialize first and last block header
+     -:    89:  ptr = MemBlockPtr(mem, sizeof(mem_head_t));
+     1:    90:  ptr->next = MemBlockPtr(mem, size - sizeof(mem_block_t));
+     1:    91:  ptr->next->next = NULL;
+     1:    92:  ptr->next->info = sizeof(mem_head_t) + sizeof(mem_block_t);
+     1:    93:  ptr->info = 0U;
+     -:    94:
+     1:    95:  EvrRtxMemoryInit(mem, size, 1U);
+     -:    96:
+     -:    97:  return 1U;
+     4:    98:}
+     -:    99:
+     -:   100:/// Allocate a memory block from a Memory Pool.
+     -:   101:/// \param[in]  mem             pointer to memory pool.
+     -:   102:/// \param[in]  size            size of a memory block in bytes.
+     -:   103:/// \param[in]  type            memory block type: 0 - generic, 1 - control block
+     -:   104:/// \return allocated memory block or NULL in case of no memory is available.
+     7:   105:__WEAK void *osRtxMemoryAlloc (void *mem, uint32_t size, uint32_t type) {
+     -:   106:  mem_block_t *ptr;
+     -:   107:  mem_block_t *p, *p_new;
+     -:   108:  uint32_t     block_size;
+     -:   109:  uint32_t     hole_size;
+     -:   110:
+     -:   111:  // Check parameters
+     7:   112:  if ((mem == NULL) || (size == 0U) || ((type & ~MB_INFO_TYPE_MASK) != 0U)) {
+     -:   113:    EvrRtxMemoryAlloc(mem, size, type, NULL);
+     -:   114:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   115:    return NULL;
+     -:   116:  }
+     -:   117:
+     -:   118:  // Add block header to size
+     -:   119:  block_size = size + sizeof(mem_block_t);
+     -:   120:  // Make sure that block is 8-byte aligned
+     7:   121:  block_size = (block_size + 7U) & ~((uint32_t)7U);
+     -:   122:
+     -:   123:  // Search for hole big enough
+     -:   124:  p = MemBlockPtr(mem, sizeof(mem_head_t));
+     -:   125:  for (;;) {
+     -:   126:    //lint -e{923} -e{9078} "cast from pointer to unsigned int"
+    22:   127:    hole_size  = (uint32_t)p->next - (uint32_t)p;
+    22:   128:    hole_size -= p->info & MB_INFO_LEN_MASK;
+    22:   129:    if (hole_size >= block_size) {
+     -:   130:      // Hole found
+     -:   131:      break;
+     -:   132:    }
+     -:   133:    p = p->next;
+    15:   134:    if (p->next == NULL) {
+     -:   135:      // Failed (end of list)
+     -:   136:      EvrRtxMemoryAlloc(mem, size, type, NULL);
+     -:   137:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   138:      return NULL;
+     -:   139:    }
+     -:   140:  }
+     -:   141:
+     -:   142:  // Update used memory
+     7:   143:  (MemHeadPtr(mem))->used += block_size;
+     -:   144:
+     -:   145:  // Update max used memory
+     7:   146:  p_new = MemBlockPtr(mem, (MemHeadPtr(mem))->size - sizeof(mem_block_t));
+     7:   147:  if (p_new->info < (MemHeadPtr(mem))->used) {
+     7:   148:    p_new->info = (MemHeadPtr(mem))->used;
+     -:   149:  }
+     -:   150:
+     -:   151:  // Allocate block
+     7:   152:  if (p->info == 0U) {
+     -:   153:    // No block allocated, set info of first element
+     1:   154:    p->info = block_size | type;
+     -:   155:    ptr = MemBlockPtr(p, sizeof(mem_block_t));
+     -:   156:  } else {
+     -:   157:    // Insert new element into the list
+     6:   158:    p_new = MemBlockPtr(p, p->info & MB_INFO_LEN_MASK);
+     6:   159:    p_new->next = p->next;
+     6:   160:    p_new->info = block_size | type;
+     6:   161:    p->next = p_new;
+     -:   162:    ptr = MemBlockPtr(p_new, sizeof(mem_block_t));
+     -:   163:  }
+     -:   164:
+     7:   165:  EvrRtxMemoryAlloc(mem, size, type, ptr);
+     -:   166:
+     -:   167:  return ptr;
+     7:   168:}
+     -:   169:
+     -:   170:/// Return an allocated memory block back to a Memory Pool.
+     -:   171:/// \param[in]  mem             pointer to memory pool.
+     -:   172:/// \param[in]  block           memory block to be returned to the memory pool.
+     -:   173:/// \return 1 - success, 0 - failure.
+     2:   174:__WEAK uint32_t osRtxMemoryFree (void *mem, void *block) {
+     -:   175:  const mem_block_t *ptr;
+     -:   176:        mem_block_t *p, *p_prev;
+     -:   177:
+     -:   178:  // Check parameters
+     2:   179:  if ((mem == NULL) || (block == NULL)) {
+     -:   180:    EvrRtxMemoryFree(mem, block, 0U);
+     -:   181:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   182:    return 0U;
+     -:   183:  }
+     -:   184:
+     -:   185:  // Memory block header
+     -:   186:  ptr = MemBlockPtr(block, 0U);
+     2:   187:  ptr--;
+     -:   188:
+     -:   189:  // Search for block header
+     -:   190:  p_prev = NULL;
+     -:   191:  p = MemBlockPtr(mem, sizeof(mem_head_t));
+     2:   192:  while (p != ptr) {
+     -:   193:    p_prev = p;
+    11:   194:    p = p->next;
+    11:   195:    if (p == NULL) {
+     -:   196:      // Not found
+     -:   197:      EvrRtxMemoryFree(mem, block, 0U);
+     -:   198:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   199:      return 0U;
+     -:   200:    }
+     -:   201:  }
+     -:   202:
+     -:   203:  // Update used memory
+     2:   204:  (MemHeadPtr(mem))->used -= p->info & MB_INFO_LEN_MASK;
+     -:   205:
+     -:   206:  // Free block
+     -:   207:  if (p_prev == NULL) {
+     -:   208:    // Release first block, only set info to 0
+ #####:   209:    p->info = 0U;
+     -:   210:  } else {
+     -:   211:    // Discard block from chained list
+     2:   212:    p_prev->next = p->next;
+     -:   213:  }
+     -:   214:
+     -:   215:  EvrRtxMemoryFree(mem, block, 1U);
+     -:   216:
+     -:   217:  return 1U;
+     2:   218:}

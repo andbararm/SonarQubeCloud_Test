@@ -1,0 +1,154 @@
+     -:     0:Source:../../../../Project/RTE/Device/ARMCM3/startup_ARMCM3.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/******************************************************************************
+     -:     2: * @file     startup_ARMCM3.c
+     -:     3: * @brief    CMSIS-Core(M) Device Startup File for a Cortex-M3 Device
+     -:     4: * @version  V2.0.3
+     -:     5: * @date     31. March 2020
+     -:     6: ******************************************************************************/
+     -:     7:/*
+     -:     8: * Copyright (c) 2009-2020 Arm Limited. All rights reserved.
+     -:     9: *
+     -:    10: * SPDX-License-Identifier: Apache-2.0
+     -:    11: *
+     -:    12: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:    13: * not use this file except in compliance with the License.
+     -:    14: * You may obtain a copy of the License at
+     -:    15: *
+     -:    16: * www.apache.org/licenses/LICENSE-2.0
+     -:    17: *
+     -:    18: * Unless required by applicable law or agreed to in writing, software
+     -:    19: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    20: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    21: * See the License for the specific language governing permissions and
+     -:    22: * limitations under the License.
+     -:    23: */
+     -:    24:
+     -:    25:#if defined (ARMCM3)
+     -:    26:  #include "ARMCM3.h"
+     -:    27:#else
+     -:    28:  #error device not specified!
+     -:    29:#endif
+     -:    30:
+     -:    31:/*----------------------------------------------------------------------------
+     -:    32:  External References
+     -:    33: *----------------------------------------------------------------------------*/
+     -:    34:extern uint32_t __INITIAL_SP;
+     -:    35:
+     -:    36:extern __NO_RETURN void __PROGRAM_START(void);
+     -:    37:
+     -:    38:/*----------------------------------------------------------------------------
+     -:    39:  Internal References
+     -:    40: *----------------------------------------------------------------------------*/
+     -:    41:__NO_RETURN void Reset_Handler  (void);
+     -:    42:            void Default_Handler(void);
+     -:    43:
+     -:    44:/*----------------------------------------------------------------------------
+     -:    45:  Exception / Interrupt Handler
+     -:    46: *----------------------------------------------------------------------------*/
+     -:    47:/* Exceptions */
+     -:    48:void NMI_Handler            (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    49:void HardFault_Handler      (void) __attribute__ ((weak));
+     -:    50:void MemManage_Handler      (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    51:void BusFault_Handler       (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    52:void UsageFault_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    53:void SVC_Handler            (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    54:void DebugMon_Handler       (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    55:void PendSV_Handler         (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    56:void SysTick_Handler        (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    57:
+     -:    58:void Interrupt0_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    59:void Interrupt1_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    60:void Interrupt2_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    61:void Interrupt3_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    62:void Interrupt4_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    63:void Interrupt5_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    64:void Interrupt6_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    65:void Interrupt7_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    66:void Interrupt8_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    67:void Interrupt9_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
+     -:    68:
+     -:    69:
+     -:    70:/*----------------------------------------------------------------------------
+     -:    71:  Exception / Interrupt Vector table
+     -:    72: *----------------------------------------------------------------------------*/
+     -:    73:
+     -:    74:#if defined ( __GNUC__ )
+     -:    75:#pragma GCC diagnostic push
+     -:    76:#pragma GCC diagnostic ignored "-Wpedantic"
+     -:    77:#endif
+     -:    78:
+     -:    79:extern const VECTOR_TABLE_Type __VECTOR_TABLE[240];
+     -:    80:       const VECTOR_TABLE_Type __VECTOR_TABLE[240] __VECTOR_TABLE_ATTRIBUTE = {
+     -:    81:  (VECTOR_TABLE_Type)(&__INITIAL_SP),       /*     Initial Stack Pointer */
+     -:    82:  Reset_Handler,                            /*     Reset Handler */
+     -:    83:  NMI_Handler,                              /* -14 NMI Handler */
+     -:    84:  HardFault_Handler,                        /* -13 Hard Fault Handler */
+     -:    85:  MemManage_Handler,                        /* -12 MPU Fault Handler */
+     -:    86:  BusFault_Handler,                         /* -11 Bus Fault Handler */
+     -:    87:  UsageFault_Handler,                       /* -10 Usage Fault Handler */
+     -:    88:  0,                                        /*     Reserved */
+     -:    89:  0,                                        /*     Reserved */
+     -:    90:  0,                                        /*     Reserved */
+     -:    91:  0,                                        /*     Reserved */
+     -:    92:  SVC_Handler,                              /*  -5 SVC Handler */
+     -:    93:  DebugMon_Handler,                         /*  -4 Debug Monitor Handler */
+     -:    94:  0,                                        /*     Reserved */
+     -:    95:  PendSV_Handler,                           /*  -2 PendSV Handler */
+     -:    96:  SysTick_Handler,                          /*  -1 SysTick Handler */
+     -:    97:
+     -:    98:  /* Interrupts */
+     -:    99:  Interrupt0_Handler,                       /*   0 Interrupt 0 */
+     -:   100:  Interrupt1_Handler,                       /*   1 Interrupt 1 */
+     -:   101:  Interrupt2_Handler,                       /*   2 Interrupt 2 */
+     -:   102:  Interrupt3_Handler,                       /*   3 Interrupt 3 */
+     -:   103:  Interrupt4_Handler,                       /*   4 Interrupt 4 */
+     -:   104:  Interrupt5_Handler,                       /*   5 Interrupt 5 */
+     -:   105:  Interrupt6_Handler,                       /*   6 Interrupt 6 */
+     -:   106:  Interrupt7_Handler,                       /*   7 Interrupt 7 */
+     -:   107:  Interrupt8_Handler,                       /*   8 Interrupt 8 */
+     -:   108:  Interrupt9_Handler                        /*   9 Interrupt 9 */
+     -:   109:                                            /* Interrupts 10 .. 223 are left out */
+     -:   110:};
+     -:   111:
+     -:   112:#if defined ( __GNUC__ )
+     -:   113:#pragma GCC diagnostic pop
+     -:   114:#endif
+     -:   115:
+     -:   116:/*----------------------------------------------------------------------------
+     -:   117:  Reset Handler called on controller reset
+     -:   118: *----------------------------------------------------------------------------*/
+     -:   119:__NO_RETURN void Reset_Handler(void)
+     -:   120:{
+     1:   121:  SystemInit();                             /* CMSIS System Initialization */
+     1:   122:  __PROGRAM_START();                        /* Enter PreMain (C library entry point) */
+     -:   123:}
+     -:   124:
+     -:   125:
+     -:   126:#if defined(__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
+     -:   127:  #pragma clang diagnostic push
+     -:   128:  #pragma clang diagnostic ignored "-Wmissing-noreturn"
+     -:   129:#endif
+     -:   130:
+     -:   131:/*----------------------------------------------------------------------------
+     -:   132:  Hard Fault Handler
+     -:   133: *----------------------------------------------------------------------------*/
+     -:   134:void HardFault_Handler(void)
+     -:   135:{
+ #####:   136:  while(1);
+     -:   137:}
+     -:   138:
+     -:   139:/*----------------------------------------------------------------------------
+     -:   140:  Default Handler for Exceptions / Interrupts
+     -:   141: *----------------------------------------------------------------------------*/
+     -:   142:void Default_Handler(void)
+     -:   143:{
+ #####:   144:  while(1);
+     -:   145:}
+     -:   146:
+     -:   147:#if defined(__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
+     -:   148:  #pragma clang diagnostic pop
+     -:   149:#endif
+     -:   150:

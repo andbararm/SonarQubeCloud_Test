@@ -1,0 +1,71 @@
+     -:     0:Source:../../../../Project/RTE/CMSIS/RTX_Config.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * $Revision:   V5.2.0
+     -:    21: *
+     -:    22: * Project:     CMSIS-RTOS RTX
+     -:    23: * Title:       RTX Configuration
+     -:    24: *
+     -:    25: * -----------------------------------------------------------------------------
+     -:    26: */
+     -:    27: 
+     -:    28:#include "cmsis_compiler.h"
+     -:    29:#include "rtx_os.h"
+     -:    30: 
+     -:    31:// OS Idle Thread
+     -:    32:__WEAK __NO_RETURN void osRtxIdleThread (void *argument) {
+     -:    33:  (void)argument;
+     -:    34:
+96790617:    35:  for (;;) {}
+     -:    36:}
+     -:    37: 
+     -:    38:// OS Error Callback function
+     -:    39:__WEAK uint32_t osRtxErrorNotify (uint32_t code, void *object_id) {
+     -:    40:  (void)object_id;
+     -:    41:
+     -:    42:  switch (code) {
+     -:    43:    case osRtxErrorStackOverflow:
+     -:    44:      // Stack overflow detected for thread (thread_id=object_id)
+     -:    45:      break;
+     -:    46:    case osRtxErrorISRQueueOverflow:
+     -:    47:      // ISR Queue overflow detected when inserting object (object_id)
+     -:    48:      break;
+     -:    49:    case osRtxErrorTimerQueueOverflow:
+     -:    50:      // User Timer Callback Queue overflow detected for timer (timer_id=object_id)
+     -:    51:      break;
+     -:    52:    case osRtxErrorClibSpace:
+     -:    53:      // Standard C/C++ library libspace not available: increase OS_THREAD_LIBSPACE_NUM
+     -:    54:      break;
+     -:    55:    case osRtxErrorClibMutex:
+     -:    56:      // Standard C/C++ library mutex initialization failed
+     -:    57:      break;
+     -:    58:    case osRtxErrorSVC:
+     -:    59:      // Invalid SVC function called (function=object_id)
+     -:    60:      break;
+     -:    61:    default:
+     -:    62:      // Reserved
+     -:    63:      break;
+     -:    64:  }
+ #####:    65:  for (;;) {}
+     -:    66://return 0U;
+     -:    67:}

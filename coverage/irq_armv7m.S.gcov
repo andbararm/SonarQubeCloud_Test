@@ -1,0 +1,285 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/GCC/irq_armv7m.S
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       ARMv7-M Exception handlers
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:
+     -:    27:        .syntax  unified
+     -:    28:
+     -:    29:        #include "rtx_def.h"
+     -:    30:
+     -:    31:        #if (defined(__ARM_FP) && (__ARM_FP > 0))
+     -:    32:        .equ     FPU_USED, 1
+     -:    33:        #else
+     -:    34:        .equ     FPU_USED, 0
+     -:    35:        #endif
+     -:    36:
+     -:    37:        .equ     I_T_RUN_OFS,       20  // osRtxInfo.thread.run offset
+     -:    38:        .equ     TCB_SP_OFS,        56  // TCB.SP offset
+     -:    39:        .equ     TCB_SF_OFS,        34  // TCB.stack_frame offset
+     -:    40:        .equ     TCB_ZONE_OFS,      68  // TCB.zone offset
+     -:    41:
+     -:    42:        .equ     FPCCR,     0xE000EF34  // FPCCR Address
+     -:    43:
+     -:    44:        .equ     osRtxErrorStackOverflow, 1 // Stack overflow
+     -:    45:        .equ     osRtxErrorSVC,           6 // Invalid SVC function called
+     -:    46:
+     -:    47:        .section ".rodata"
+     -:    48:        .global  irqRtxLib              // Non weak library reference
+     -:    49:irqRtxLib:
+     -:    50:        .byte    0
+     -:    51:
+     -:    52:
+     -:    53:        .thumb
+     -:    54:        .section ".text"
+     -:    55:        .align   2
+     -:    56:        .eabi_attribute Tag_ABI_align_preserved, 1
+     -:    57:
+     -:    58:
+     -:    59:        .thumb_func
+     -:    60:        .type    SVC_Handler, %function
+     -:    61:        .global  SVC_Handler
+     -:    62:        .fnstart
+     -:    63:        .cantunwind
+     -:    64:SVC_Handler:
+     -:    65:
+   898:    66:        tst      lr,#0x04               // Determine return stack from EXC_RETURN bit 2
+   898:    67:        ite      eq
+   898:    68:        mrseq    r0,msp                 // Get MSP if return stack is MSP
+   898:    69:        mrsne    r0,psp                 // Get PSP if return stack is PSP
+     -:    70:
+   898:    71:        ldr      r1,[r0,#24]            // Load saved PC from stack
+   898:    72:        ldrb     r1,[r1,#-2]            // Load SVC number
+   898:    73:        cmp      r1,#0                  // Check SVC number
+   898:    74:        bne      SVC_User               // Branch if not SVC 0
+     -:    75:
+     -:    76:    #ifdef RTX_SVC_PTR_CHECK
+     -:    77:
+     -:    78:        ldr      r12,[r0,#16]           // Load function address from stack
+     -:    79:        sub      r1,r12,#1              // Clear T-bit of function address
+     -:    80:        lsls     r2,r1,#30              // Check if 4-byte aligned
+     -:    81:        beq      SVC_PtrBoundsCheck     // Branch if address is aligned
+     -:    82:
+     -:    83:SVC_PtrInvalid:
+     -:    84:        push     {r0,lr}                // Save SP and EXC_RETURN
+     -:    85:        movs     r0,#osRtxErrorSVC      // Parameter: code
+     -:    86:        mov      r1,r12                 // Parameter: object_id
+     -:    87:        bl       osRtxKernelErrorNotify // Call osRtxKernelErrorNotify
+     -:    88:        pop      {r12,lr}               // Restore SP and EXC_RETURN
+     -:    89:        b        SVC_Context            // Branch to context handling
+     -:    90:
+     -:    91:SVC_PtrBoundsCheck:
+     -:    92:        ldr      r2,=Image$$RTX_SVC_VENEERS$$Base
+     -:    93:        ldr      r3,=Image$$RTX_SVC_VENEERS$$Length
+     -:    94:        subs     r2,r1,r2               // Subtract SVC table base address
+     -:    95:        cmp      r2,r3                  // Compare with SVC table boundaries
+     -:    96:        bhs      SVC_PtrInvalid         // Branch if address is out of bounds
+     -:    97:
+     -:    98:    #endif // RTX_SVC_PTR_CHECK
+     -:    99:
+   898:   100:        push     {r0,lr}                // Save SP and EXC_RETURN
+   898:   101:        ldm      r0,{r0-r3,r12}         // Load function parameters and address from stack
+   898:   102:        blx      r12                    // Call service function
+   898:   103:        pop      {r12,lr}               // Restore SP and EXC_RETURN
+   898:   104:        str      r0,[r12]               // Store function return value
+     -:   105:
+     -:   106:SVC_Context:
+  4786:   107:        ldr      r3,=osRtxInfo+I_T_RUN_OFS // Load address of osRtxInfo.thread.run
+  4786:   108:        ldm      r3,{r1,r2}             // Load osRtxInfo.thread.run: curr & next
+  4786:   109:        cmp      r1,r2                  // Check if thread switch is required
+  4786:   110:        it       eq
+  4786:   111:        bxeq     lr                     // Exit when threads are the same
+     -:   112:
+     3:   113:        str      r2,[r3]                // osRtxInfo.thread.run: curr = next
+     -:   114:
+     -:   115:      .if (FPU_USED != 0)
+     -:   116:        cbnz     r1,SVC_ContextSave     // Branch if running thread is not deleted
+     -:   117:SVC_FP_LazyState:
+     -:   118:        tst      lr,#0x10               // Determine stack frame from EXC_RETURN bit 4
+     -:   119:        bne      SVC_ContextRestore     // Branch if not extended stack frame
+     -:   120:        ldr      r3,=FPCCR              // FPCCR Address
+     -:   121:        ldr      r0,[r3]                // Load FPCCR
+     -:   122:        bic      r0,r0,#1               // Clear LSPACT (Lazy state preservation)
+     -:   123:        str      r0,[r3]                // Store FPCCR
+     -:   124:        b        SVC_ContextRestore     // Branch to context restore handling
+     -:   125:      .else
+     3:   126:        cbz      r1,SVC_ContextRestore  // Branch if running thread is deleted
+     -:   127:      .endif
+     -:   128:
+     -:   129:SVC_ContextSave:
+     -:   130:    #ifdef RTX_STACK_CHECK
+     1:   131:        sub      r12,r12,#32            // Calculate SP: space for R4..R11
+     -:   132:      .if (FPU_USED != 0)
+     -:   133:        tst      lr,#0x10               // Determine stack frame from EXC_RETURN bit 4
+     -:   134:        it       eq                     // If extended stack frame
+     -:   135:        subeq    r12,r12,#64            //  Additional space for S16..S31
+     -:   136:        strb     lr, [r1,#TCB_SF_OFS]   // Store stack frame information
+     -:   137:      .endif
+     1:   138:        str      r12,[r1,#TCB_SP_OFS]   // Store SP
+     -:   139:
+     1:   140:        push     {r1,r2}                // Save osRtxInfo.thread.run: curr & next
+     1:   141:        mov      r0,r1                  // Parameter: osRtxInfo.thread.run.curr
+     1:   142:        bl       osRtxThreadStackCheck  // Check if thread stack is overrun
+     1:   143:        pop      {r1,r2}                // Restore osRtxInfo.thread.run: curr & next
+     1:   144:        cbnz     r0,SVC_ContextSaveRegs // Branch when stack check is ok
+     -:   145:
+     -:   146:      .if (FPU_USED != 0)
+     -:   147:        mov      r4,r1                  // Assign osRtxInfo.thread.run.curr to R4
+     -:   148:      .endif
+ #####:   149:        movs     r0,#osRtxErrorStackOverflow // Parameter: r0=code, r1=object_id
+ #####:   150:        bl       osRtxKernelErrorNotify      // Call osRtxKernelErrorNotify
+ #####:   151:        ldr      r3,=osRtxInfo+I_T_RUN_OFS   // Load address of osRtxInfo.thread.run
+ #####:   152:        ldr      r2,[r3,#4]             // Load osRtxInfo.thread.run: next
+ #####:   153:        str      r2,[r3]                // osRtxInfo.thread.run: curr = next
+ #####:   154:        movs     r1,#0                  // Simulate deleted running thread
+     -:   155:      .if (FPU_USED != 0)
+     -:   156:        ldrsb    lr,[r4,#TCB_SF_OFS]    // Load stack frame information
+     -:   157:        b        SVC_FP_LazyState       // Branch to FP lazy state handling
+     -:   158:      .else
+ #####:   159:        b        SVC_ContextRestore     // Branch to context restore handling
+     -:   160:      .endif
+     -:   161:
+     -:   162:SVC_ContextSaveRegs:
+     1:   163:        ldr      r12,[r1,#TCB_SP_OFS]   // Load SP
+     -:   164:      .if (FPU_USED != 0)
+     -:   165:        ldrsb    lr, [r1,#TCB_SF_OFS]   // Load stack frame information
+     -:   166:        tst      lr,#0x10               // Determine stack frame from EXC_RETURN bit 4
+     -:   167:        it       eq                     // If extended stack frame
+     -:   168:        vstmiaeq r12!,{s16-s31}         //  Save VFP S16..S31
+     -:   169:      .endif
+     1:   170:        stm      r12,{r4-r11}           // Save R4..R11
+     -:   171:    #else
+     -:   172:        stmdb    r12!,{r4-r11}          // Save R4..R11
+     -:   173:      .if (FPU_USED != 0)
+     -:   174:        tst      lr,#0x10               // Determine stack frame from EXC_RETURN bit 4
+     -:   175:        it       eq                     // If extended stack frame
+     -:   176:        vstmdbeq r12!,{s16-s31}         //  Save VFP S16.S31
+     -:   177:        strb     lr, [r1,#TCB_SF_OFS]   // Store stack frame information
+     -:   178:      .endif
+     -:   179:        str      r12,[r1,#TCB_SP_OFS]   // Store SP
+     -:   180:    #endif // RTX_STACK_CHECK
+     -:   181:
+     -:   182:SVC_ContextRestore:
+     3:   183:        movs     r4,r2                  // Assign osRtxInfo.thread.run.next to R4, clear Z flag
+     -:   184:    #ifdef RTX_EXECUTION_ZONE
+     -:   185:        ldrb     r0,[r2,#TCB_ZONE_OFS]  // Load osRtxInfo.thread.run.next: zone
+     -:   186:        cbz      r1,SVC_ZoneSetup       // Branch if running thread is deleted (Z flag unchanged)
+     -:   187:        ldrb     r1,[r1,#TCB_ZONE_OFS]  // Load osRtxInfo.thread.run.curr: zone
+     -:   188:        cmp      r0,r1                  // Check if next:zone == curr:zone
+     -:   189:
+     -:   190:SVC_ZoneSetup:
+     -:   191:        it       ne                     // If zone has changed or running thread is deleted
+     -:   192:        blne     osZoneSetup_Callback   //  Setup zone for next thread
+     -:   193:    #endif // RTX_EXECUTION_ZONE
+     -:   194:
+     3:   195:        ldr      r0,[r4,#TCB_SP_OFS]    // Load SP
+     -:   196:      .if (FPU_USED != 0)
+     -:   197:        ldrsb    lr,[r4,#TCB_SF_OFS]    // Load stack frame information
+     -:   198:        tst      lr,#0x10               // Determine stack frame from EXC_RETURN bit 4
+     -:   199:        it       eq                     // If extended stack frame
+     -:   200:        vldmiaeq r0!,{s16-s31}          //  Restore VFP S16..S31
+     -:   201:      .else
+     3:   202:        mvn      lr,#~0xFFFFFFFD        // Set EXC_RETURN value
+     -:   203:      .endif
+     3:   204:        ldmia    r0!,{r4-r11}           // Restore R4..R11
+     3:   205:        msr      psp,r0                 // Set PSP
+     -:   206:
+     -:   207:SVC_Exit:
+     3:   208:        bx       lr                     // Exit from handler
+     -:   209:
+     -:   210:SVC_User:
+ #####:   211:        ldr      r2,=osRtxUserSVC       // Load address of SVC table
+ #####:   212:        ldr      r3,[r2]                // Load SVC maximum number
+ #####:   213:        cmp      r1,r3                  // Check SVC number range
+ #####:   214:        bhi      SVC_Exit               // Branch if out of range
+     -:   215:
+ #####:   216:        push     {r0,lr}                // Save SP and EXC_RETURN
+ #####:   217:        ldr      r12,[r2,r1,lsl #2]     // Load address of SVC function
+ #####:   218:        ldm      r0,{r0-r3}             // Load function parameters from stack
+ #####:   219:        blx      r12                    // Call service function
+ #####:   220:        pop      {r12,lr}               // Restore SP and EXC_RETURN
+ #####:   221:        str      r0,[r12]               // Store function return value
+     -:   222:
+ #####:   223:        bx       lr                     // Return from handler
+     -:   224:
+     -:   225:        .fnend
+     -:   226:        .size    SVC_Handler, .-SVC_Handler
+     -:   227:
+     -:   228:
+     -:   229:        .thumb_func
+     -:   230:        .type    PendSV_Handler, %function
+     -:   231:        .global  PendSV_Handler
+     -:   232:        .fnstart
+     -:   233:        .cantunwind
+     -:   234:PendSV_Handler:
+     -:   235:
+ #####:   236:        push     {r0,lr}                // Save EXC_RETURN
+ #####:   237:        bl       osRtxPendSV_Handler    // Call osRtxPendSV_Handler
+ #####:   238:        pop      {r0,lr}                // Restore EXC_RETURN
+ #####:   239:        mrs      r12,psp                // Save PSP to R12
+ #####:   240:        b        SVC_Context            // Branch to context handling
+     -:   241:
+     -:   242:        .fnend
+     -:   243:        .size    PendSV_Handler, .-PendSV_Handler
+     -:   244:
+     -:   245:
+     -:   246:        .thumb_func
+     -:   247:        .type    SysTick_Handler, %function
+     -:   248:        .global  SysTick_Handler
+     -:   249:        .fnstart
+     -:   250:        .cantunwind
+     -:   251:SysTick_Handler:
+     -:   252:
+  3888:   253:        push     {r0,lr}                // Save EXC_RETURN
+  3888:   254:        bl       osRtxTick_Handler      // Call osRtxTick_Handler
+  3888:   255:        pop      {r0,lr}                // Restore EXC_RETURN
+  3888:   256:        mrs      r12,psp                // Save PSP to R12
+  3888:   257:        b        SVC_Context            // Branch to context handling
+     -:   258:
+     -:   259:        .fnend
+     -:   260:        .size    SysTick_Handler, .-SysTick_Handler
+     -:   261:
+     -:   262:
+     -:   263:    #ifdef RTX_SAFETY_FEATURES
+     -:   264:
+     -:   265:        .thumb_func
+     -:   266:        .type    osFaultResume, %function
+     -:   267:        .global  osFaultResume
+     -:   268:        .fnstart
+     -:   269:        .cantunwind
+     -:   270:osFaultResume:
+     -:   271:
+     -:   272:        mrs      r12,psp                // Save PSP to R12
+     -:   273:        b        SVC_Context            // Branch to context handling
+     -:   274:
+     -:   275:        .fnend
+     -:   276:        .size   osFaultResume, .-osFaultResume
+     -:   277:
+     -:   278:    #endif // RTX_SAFETY_FEATURES
+     -:   279:
+     -:   280:
+     -:   281:        .end

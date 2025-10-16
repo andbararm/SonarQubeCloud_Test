@@ -1,0 +1,637 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_timer.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       Timer functions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#include "rtx_lib.h"
+     -:    27:
+     -:    28:
+     -:    29://  OS Runtime Object Memory Usage
+     -:    30:#ifdef RTX_OBJ_MEM_USAGE
+     -:    31:osRtxObjectMemUsage_t osRtxTimerMemUsage \
+     -:    32:__attribute__((section(".data.os.timer.obj"))) =
+     -:    33:{ 0U, 0U, 0U };
+     -:    34:#endif
+     -:    35:
+     -:    36:
+     -:    37://  ==== Helper functions ====
+     -:    38:
+     -:    39:/// Insert Timer into the Timer List sorted by Time.
+     -:    40:/// \param[in]  timer           timer object.
+     -:    41:/// \param[in]  tick            timer tick.
+     -:    42:static void TimerInsert (os_timer_t *timer, uint32_t tick) {
+     -:    43:  os_timer_t *prev, *next;
+     -:    44:
+     -:    45:  prev = NULL;
+     -:    46:  next = osRtxInfo.timer.list;
+ #####:    47:  while ((next != NULL) && (next->tick <= tick)) {
+ #####:    48:    tick -= next->tick;
+     -:    49:    prev  = next;
+     -:    50:    next  = next->next;
+     -:    51:  }
+ #####:    52:  timer->tick = tick;
+ #####:    53:  timer->prev = prev;
+     -:    54:  timer->next = next;
+     -:    55:  if (next != NULL) {
+ #####:    56:    next->tick -= timer->tick;
+ #####:    57:    next->prev  = timer;
+ #####:    58:  }
+ #####:    59:  if (prev != NULL) {
+ #####:    60:    prev->next = timer;
+     -:    61:  } else {
+ #####:    62:    osRtxInfo.timer.list = timer;
+     -:    63:  }
+     -:    64:}
+     -:    65:
+     -:    66:/// Remove Timer from the Timer List.
+     -:    67:/// \param[in]  timer           timer object.
+     -:    68:static void TimerRemove (const os_timer_t *timer) {
+     -:    69:
+ #####:    70:  if (timer->next != NULL) {
+ #####:    71:    timer->next->tick += timer->tick;
+ #####:    72:    timer->next->prev  = timer->prev;
+     -:    73:  }
+ #####:    74:  if (timer->prev != NULL) {
+ #####:    75:    timer->prev->next  = timer->next;
+     -:    76:  } else {
+     -:    77:    osRtxInfo.timer.list = timer->next;
+     -:    78:  }
+     -:    79:}
+     -:    80:
+     -:    81:/// Unlink Timer from the Timer List Head.
+     -:    82:/// \param[in]  timer           timer object.
+     -:    83:static void TimerUnlink (const os_timer_t *timer) {
+     -:    84:
+ #####:    85:  if (timer->next != NULL) {
+ #####:    86:    timer->next->prev = timer->prev;
+     -:    87:  }
+ #####:    88:  osRtxInfo.timer.list = timer->next;
+     -:    89:}
+     -:    90:
+     -:    91:/// Verify that Timer object pointer is valid.
+     -:    92:/// \param[in]  timer           timer object.
+     -:    93:/// \return true - valid, false - invalid.
+     -:    94:static bool_t IsTimerPtrValid (const os_timer_t *timer) {
+     -:    95:#ifdef RTX_OBJ_PTR_CHECK
+     -:    96:  //lint --e{923} --e{9078} "cast from pointer to unsigned int" [MISRA Note 7]
+     -:    97:  uint32_t cb_start  = (uint32_t)&__os_timer_cb_start__;
+     -:    98:  uint32_t cb_length = (uint32_t)&__os_timer_cb_length__;
+     -:    99:
+     -:   100:  // Check the section boundaries
+     -:   101:  if (((uint32_t)timer - cb_start) >= cb_length) {
+     -:   102:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   103:    return FALSE;
+     -:   104:  }
+     -:   105:  // Check the object alignment
+     -:   106:  if ((((uint32_t)timer - cb_start) % sizeof(os_timer_t)) != 0U) {
+     -:   107:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   108:    return FALSE;
+     -:   109:  }
+     -:   110:#else
+     -:   111:  // Check NULL pointer
+     -:   112:  if (timer == NULL) {
+     -:   113:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   114:    return FALSE;
+     -:   115:  }
+     -:   116:#endif
+     -:   117:  return TRUE;
+     -:   118:}
+     -:   119:
+     -:   120:
+     -:   121://  ==== Library functions ====
+     -:   122:
+     -:   123:/// Timer Tick (called each SysTick).
+  3888:   124:static void osRtxTimerTick (void) {
+     -:   125:  os_thread_t *thread_running;
+     -:   126:  os_timer_t  *timer;
+     -:   127:  osStatus_t   status;
+     -:   128:
+  3888:   129:  timer = osRtxInfo.timer.list;
+  3888:   130:  if (timer == NULL) {
+     -:   131:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   132:    return;
+     -:   133:  }
+     -:   134:
+     -:   135:  thread_running = osRtxThreadGetRunning();
+     -:   136:
+ #####:   137:  timer->tick--;
+ #####:   138:  while ((timer != NULL) && (timer->tick == 0U)) {
+     -:   139:    TimerUnlink(timer);
+ #####:   140:    status = osMessageQueuePut(osRtxInfo.timer.mq, &timer->finfo, 0U, 0U);
+ #####:   141:    if (status != osOK) {
+     -:   142:      const os_thread_t *thread = osRtxThreadGetRunning();
+     -:   143:      osRtxThreadSetRunning(osRtxInfo.thread.run.next);
+ #####:   144:      (void)osRtxKernelErrorNotify(osRtxErrorTimerQueueOverflow, timer);
+ #####:   145:      if (osRtxThreadGetRunning() == NULL) {
+     -:   146:        if (thread_running == thread) {
+     -:   147:          thread_running = NULL;
+     -:   148:        }
+     -:   149:      }
+     -:   150:    }
+ #####:   151:    if ((timer->attr & osRtxTimerPeriodic) != 0U) {
+ #####:   152:      TimerInsert(timer, timer->load);
+     -:   153:    } else {
+ #####:   154:      timer->state = osRtxTimerStopped;
+     -:   155:    }
+ #####:   156:    timer = osRtxInfo.timer.list;
+     -:   157:  }
+     -:   158:
+     -:   159:  osRtxThreadSetRunning(thread_running);
+  3888:   160:}
+     -:   161:
+     -:   162:/// Setup Timer Thread objects.
+     -:   163://lint -esym(714,osRtxTimerSetup) "Referenced from library configuration"
+     -:   164://lint -esym(759,osRtxTimerSetup) "Prototype in header"
+     -:   165://lint -esym(765,osRtxTimerSetup) "Global scope"
+     1:   166:int32_t osRtxTimerSetup (void) {
+     -:   167:  int32_t ret = -1;
+     -:   168:
+     1:   169:  if (osRtxMessageQueueTimerSetup() == 0) {
+     1:   170:    osRtxInfo.timer.tick = osRtxTimerTick;
+     -:   171:    ret = 0;
+     -:   172:  }
+     -:   173:
+     1:   174:  return ret;
+     -:   175:}
+     -:   176:
+     -:   177:/// Timer Thread
+     -:   178://lint -esym(714,osRtxTimerThread) "Referenced from library configuration"
+     -:   179://lint -esym(759,osRtxTimerThread) "Prototype in header"
+     -:   180://lint -esym(765,osRtxTimerThread) "Global scope"
+     1:   181:__NO_RETURN void osRtxTimerThread (void *argument) {
+     -:   182:  os_timer_finfo_t   finfo;
+     -:   183:  osStatus_t         status;
+     -:   184:  osMessageQueueId_t mq = (osMessageQueueId_t)argument;
+     -:   185:
+     -:   186:  for (;;) {
+     -:   187:    //lint -e{934} "Taking address of near auto variable"
+     1:   188:    status = osMessageQueueGet(mq, &finfo, NULL, osWaitForever);
+ #####:   189:    if (status == osOK) {
+ #####:   190:      EvrRtxTimerCallback(finfo.func, finfo.arg);
+ #####:   191:      (finfo.func)(finfo.arg);
+ #####:   192:    }
+     -:   193:  }
+     -:   194:}
+     -:   195:
+     -:   196:/// Destroy a Timer object.
+     -:   197:/// \param[in]  timer           timer object.
+     -:   198:static void osRtxTimerDestroy (os_timer_t *timer) {
+     -:   199:
+     -:   200:  // Mark object as inactive and invalid
+     -:   201:  timer->state = osRtxTimerInactive;
+     -:   202:  timer->id    = osRtxIdInvalid;
+     -:   203:
+     -:   204:  // Free object memory
+     -:   205:  if ((timer->flags & osRtxFlagSystemObject) != 0U) {
+     -:   206:#ifdef RTX_OBJ_PTR_CHECK
+     -:   207:    (void)osRtxMemoryPoolFree(osRtxInfo.mpi.timer, timer);
+     -:   208:#else
+     -:   209:    if (osRtxInfo.mpi.timer != NULL) {
+ #####:   210:      (void)osRtxMemoryPoolFree(osRtxInfo.mpi.timer, timer);
+     -:   211:    } else {
+     -:   212:      (void)osRtxMemoryFree(osRtxInfo.mem.common, timer);
+     -:   213:    }
+     -:   214:#endif
+     -:   215:#ifdef RTX_OBJ_MEM_USAGE
+     -:   216:    osRtxTimerMemUsage.cnt_free++;
+     -:   217:#endif
+     -:   218:  }
+     -:   219:
+     -:   220:  EvrRtxTimerDestroyed(timer);
+     -:   221:}
+     -:   222:
+     -:   223:#ifdef RTX_SAFETY_CLASS
+     -:   224:/// Delete a Timer safety class.
+     -:   225:/// \param[in]  safety_class    safety class.
+     -:   226:/// \param[in]  mode            safety mode.
+     -:   227:void osRtxTimerDeleteClass (uint32_t safety_class, uint32_t mode) {
+     -:   228:  os_timer_t *timer;
+     -:   229:  uint32_t    length;
+     -:   230:
+     -:   231:  //lint --e{923} --e{9078} "cast from pointer to unsigned int" [MISRA Note 7]
+     -:   232:  timer = (os_timer_t *)(uint32_t)&__os_timer_cb_start__;
+     -:   233:  length    =           (uint32_t)&__os_timer_cb_length__;
+     -:   234:  while (length >= sizeof(os_timer_t)) {
+     -:   235:    if (   (timer->id == osRtxIdTimer) &&
+     -:   236:        ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   237:          ((timer->attr >> osRtxAttrClass_Pos) == (uint8_t)safety_class)) ||
+     -:   238:         (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   239:          ((timer->attr >> osRtxAttrClass_Pos) <  (uint8_t)safety_class)))) {
+     -:   240:      if (timer->state == osRtxTimerRunning) {
+     -:   241:        TimerRemove(timer);
+     -:   242:      }
+     -:   243:      osRtxTimerDestroy(timer);
+     -:   244:    }
+     -:   245:    length -= sizeof(os_timer_t);
+     -:   246:    timer++;
+     -:   247:  }
+     -:   248:}
+     -:   249:#endif
+     -:   250:
+     -:   251:
+     -:   252://  ==== Service Calls ====
+     -:   253:
+     -:   254:/// Create and Initialize a timer.
+     -:   255:/// \note API identical to osTimerNew
+     -:   256:static osTimerId_t svcRtxTimerNew (osTimerFunc_t func, osTimerType_t type, void *argument, const osTimerAttr_t *attr) {
+     -:   257:  os_timer_t        *timer;
+     -:   258:#ifdef RTX_SAFETY_CLASS
+     -:   259:  const os_thread_t *thread = osRtxThreadGetRunning();
+     -:   260:#endif
+     -:   261:  uint32_t           attr_bits;
+     -:   262:  uint8_t            flags;
+     -:   263:  const char        *name;
+     -:   264:
+     -:   265:  // Check parameters
+     -:   266:  if ((func == NULL) || ((type != osTimerOnce) && (type != osTimerPeriodic))) {
+     -:   267:    EvrRtxTimerError(NULL, (int32_t)osErrorParameter);
+     -:   268:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   269:    return NULL;
+     -:   270:  }
+     -:   271:
+     -:   272:  // Process attributes
+     -:   273:  if (attr != NULL) {
+     -:   274:    name      = attr->name;
+     -:   275:    attr_bits = attr->attr_bits;
+     -:   276:    //lint -e{9079} "conversion from pointer to void to pointer to other type" [MISRA Note 6]
+     -:   277:    timer      = attr->cb_mem;
+     -:   278:    if ((attr_bits & osSafetyClass_Valid) != 0U) {
+     -:   279:#ifdef RTX_SAFETY_CLASS
+     -:   280:      if ((thread != NULL) &&
+     -:   281:          ((thread->attr >> osRtxAttrClass_Pos) <
+     -:   282:          (uint8_t)((attr_bits & osSafetyClass_Msk) >> osSafetyClass_Pos))) {
+     -:   283:        EvrRtxTimerError(NULL, (int32_t)osErrorSafetyClass);
+     -:   284:        //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   285:        return NULL;
+     -:   286:      }
+     -:   287:#else
+ #####:   288:      EvrRtxTimerError(NULL, (int32_t)osErrorSafetyClass);
+     -:   289:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   290:      return NULL;
+     -:   291:#endif
+     -:   292:    }
+     -:   293:    if (timer != NULL) {
+     -:   294:      if (!IsTimerPtrValid(timer) || (attr->cb_size != sizeof(os_timer_t))) {
+     -:   295:        EvrRtxTimerError(NULL, osRtxErrorInvalidControlBlock);
+     -:   296:        //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   297:        return NULL;
+     -:   298:      }
+     -:   299:    } else {
+ #####:   300:      if (attr->cb_size != 0U) {
+     -:   301:        EvrRtxTimerError(NULL, osRtxErrorInvalidControlBlock);
+     -:   302:        //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   303:        return NULL;
+     -:   304:      }
+     -:   305:    }
+     -:   306:  } else {
+     -:   307:    name      = NULL;
+     -:   308:#ifdef RTX_SAFETY_CLASS
+     -:   309:    attr_bits = 0U;
+     -:   310:#endif
+     -:   311:    timer     = NULL;
+     -:   312:  }
+     -:   313:
+     -:   314:  // Allocate object memory if not provided
+ #####:   315:  if (timer == NULL) {
+ #####:   316:    if (osRtxInfo.mpi.timer != NULL) {
+     -:   317:      //lint -e{9079} "conversion from pointer to void to pointer to other type" [MISRA Note 5]
+ #####:   318:      timer = osRtxMemoryPoolAlloc(osRtxInfo.mpi.timer);
+     -:   319:#ifndef RTX_OBJ_PTR_CHECK
+     -:   320:    } else {
+     -:   321:      //lint -e{9079} "conversion from pointer to void to pointer to other type" [MISRA Note 5]
+ #####:   322:      timer = osRtxMemoryAlloc(osRtxInfo.mem.common, sizeof(os_timer_t), 1U);
+     -:   323:#endif
+     -:   324:    }
+     -:   325:#ifdef RTX_OBJ_MEM_USAGE
+     -:   326:    if (timer != NULL) {
+     -:   327:      uint32_t used;
+     -:   328:      osRtxTimerMemUsage.cnt_alloc++;
+     -:   329:      used = osRtxTimerMemUsage.cnt_alloc - osRtxTimerMemUsage.cnt_free;
+     -:   330:      if (osRtxTimerMemUsage.max_used < used) {
+     -:   331:        osRtxTimerMemUsage.max_used = used;
+     -:   332:      }
+     -:   333:    }
+     -:   334:#endif
+     -:   335:    flags = osRtxFlagSystemObject;
+     -:   336:  } else {
+     -:   337:    flags = 0U;
+     -:   338:  }
+     -:   339:
+ #####:   340:  if (timer != NULL) {
+     -:   341:    // Initialize control block
+ #####:   342:    timer->id         = osRtxIdTimer;
+     -:   343:    timer->state      = osRtxTimerStopped;
+ #####:   344:    timer->flags      = flags;
+ #####:   345:    if (type == osTimerPeriodic) {
+     -:   346:      timer->attr     = osRtxTimerPeriodic;
+     -:   347:    } else {
+     -:   348:      timer->attr     = 0U;
+     -:   349:    }
+ #####:   350:    timer->name       = name;
+     -:   351:    timer->prev       = NULL;
+ #####:   352:    timer->next       = NULL;
+     -:   353:    timer->tick       = 0U;
+     -:   354:    timer->load       = 0U;
+     -:   355:    timer->finfo.func = func;
+ #####:   356:    timer->finfo.arg  = argument;
+     -:   357:#ifdef RTX_SAFETY_CLASS
+     -:   358:    if ((attr_bits & osSafetyClass_Valid) != 0U) {
+     -:   359:      timer->attr    |= (uint8_t)((attr_bits & osSafetyClass_Msk) >>
+     -:   360:                                  (osSafetyClass_Pos - osRtxAttrClass_Pos));
+     -:   361:    } else {
+     -:   362:      // Inherit safety class from the running thread
+     -:   363:      if (thread != NULL) {
+     -:   364:        timer->attr  |= (uint8_t)(thread->attr & osRtxAttrClass_Msk);
+     -:   365:      }
+     -:   366:    }
+     -:   367:#endif
+ #####:   368:    EvrRtxTimerCreated(timer, timer->name);
+     -:   369:  } else {
+ #####:   370:    EvrRtxTimerError(NULL, (int32_t)osErrorNoMemory);
+     -:   371:  }
+     -:   372:
+     -:   373:  return timer;
+ #####:   374:}
+     -:   375:
+     -:   376:/// Get name of a timer.
+     -:   377:/// \note API identical to osTimerGetName
+     -:   378:static const char *svcRtxTimerGetName (osTimerId_t timer_id) {
+     -:   379:  os_timer_t *timer = osRtxTimerId(timer_id);
+     -:   380:
+     -:   381:  // Check parameters
+ #####:   382:  if (!IsTimerPtrValid(timer) || (timer->id != osRtxIdTimer)) {
+ #####:   383:    EvrRtxTimerGetName(timer, NULL);
+     -:   384:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   385:    return NULL;
+     -:   386:  }
+     -:   387:
+ #####:   388:  EvrRtxTimerGetName(timer, timer->name);
+     -:   389:
+ #####:   390:  return timer->name;
+ #####:   391:}
+     -:   392:
+     -:   393:/// Start or restart a timer.
+     -:   394:/// \note API identical to osTimerStart
+     -:   395:static osStatus_t svcRtxTimerStart (osTimerId_t timer_id, uint32_t ticks) {
+     -:   396:  os_timer_t        *timer = osRtxTimerId(timer_id);
+     -:   397:#ifdef RTX_SAFETY_CLASS
+     -:   398:  const os_thread_t *thread;
+     -:   399:#endif
+     -:   400:
+     -:   401:  // Check parameters
+     -:   402:  if (!IsTimerPtrValid(timer) || (timer->id != osRtxIdTimer) || (ticks == 0U)) {
+     -:   403:    EvrRtxTimerError(timer, (int32_t)osErrorParameter);
+     -:   404:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   405:    return osErrorParameter;
+     -:   406:  }
+     -:   407:
+     -:   408:#ifdef RTX_SAFETY_CLASS
+     -:   409:  // Check running thread safety class
+     -:   410:  thread = osRtxThreadGetRunning();
+     -:   411:  if ((thread != NULL) &&
+     -:   412:      ((thread->attr >> osRtxAttrClass_Pos) < (timer->attr >> osRtxAttrClass_Pos))) {
+     -:   413:    EvrRtxTimerError(timer, (int32_t)osErrorSafetyClass);
+     -:   414:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   415:    return osErrorSafetyClass;
+     -:   416:  }
+     -:   417:#endif
+     -:   418:
+ #####:   419:  if (timer->state == osRtxTimerRunning) {
+     -:   420:    timer->load = ticks;
+     -:   421:    TimerRemove(timer);
+     -:   422:  } else {
+ #####:   423:    if (osRtxInfo.timer.tick == NULL) {
+     -:   424:      EvrRtxTimerError(timer, (int32_t)osErrorResource);
+     -:   425:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   426:      return osErrorResource;
+     -:   427:    } else {
+     -:   428:      timer->state = osRtxTimerRunning;
+     -:   429:      timer->load  = ticks;
+     -:   430:    }
+     -:   431:  }
+     -:   432:
+     -:   433:  TimerInsert(timer, ticks);
+     -:   434:
+ #####:   435:  EvrRtxTimerStarted(timer);
+     -:   436:
+     -:   437:  return osOK;
+ #####:   438:}
+     -:   439:
+     -:   440:/// Stop a timer.
+     -:   441:/// \note API identical to osTimerStop
+     -:   442:static osStatus_t svcRtxTimerStop (osTimerId_t timer_id) {
+     -:   443:  os_timer_t        *timer = osRtxTimerId(timer_id);
+     -:   444:#ifdef RTX_SAFETY_CLASS
+     -:   445:  const os_thread_t *thread;
+     -:   446:#endif
+     -:   447:
+     -:   448:  // Check parameters
+     -:   449:  if (!IsTimerPtrValid(timer) || (timer->id != osRtxIdTimer)) {
+     -:   450:    EvrRtxTimerError(timer, (int32_t)osErrorParameter);
+     -:   451:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   452:    return osErrorParameter;
+     -:   453:  }
+     -:   454:
+     -:   455:#ifdef RTX_SAFETY_CLASS
+     -:   456:  // Check running thread safety class
+     -:   457:  thread = osRtxThreadGetRunning();
+     -:   458:  if ((thread != NULL) &&
+     -:   459:      ((thread->attr >> osRtxAttrClass_Pos) < (timer->attr >> osRtxAttrClass_Pos))) {
+     -:   460:    EvrRtxTimerError(timer, (int32_t)osErrorSafetyClass);
+     -:   461:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   462:    return osErrorSafetyClass;
+     -:   463:  }
+     -:   464:#endif
+     -:   465:
+     -:   466:  // Check object state
+     -:   467:  if (timer->state != osRtxTimerRunning) {
+     -:   468:    EvrRtxTimerError(timer, (int32_t)osErrorResource);
+     -:   469:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   470:    return osErrorResource;
+     -:   471:  }
+     -:   472:
+     -:   473:  timer->state = osRtxTimerStopped;
+     -:   474:
+     -:   475:  TimerRemove(timer);
+     -:   476:
+     -:   477:  EvrRtxTimerStopped(timer);
+     -:   478:
+     -:   479:  return osOK;
+ #####:   480:}
+     -:   481:
+     -:   482:/// Check if a timer is running.
+     -:   483:/// \note API identical to osTimerIsRunning
+     -:   484:static uint32_t svcRtxTimerIsRunning (osTimerId_t timer_id) {
+     -:   485:  os_timer_t *timer = osRtxTimerId(timer_id);
+     -:   486:  uint32_t    is_running;
+     -:   487:
+     -:   488:  // Check parameters
+     -:   489:  if (!IsTimerPtrValid(timer) || (timer->id != osRtxIdTimer)) {
+     -:   490:    EvrRtxTimerIsRunning(timer, 0U);
+     -:   491:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   492:    return 0U;
+     -:   493:  }
+     -:   494:
+     -:   495:  if (timer->state == osRtxTimerRunning) {
+     -:   496:    EvrRtxTimerIsRunning(timer, 1U);
+     -:   497:    is_running = 1U;
+     -:   498:  } else {
+     -:   499:    EvrRtxTimerIsRunning(timer, 0U);
+     -:   500:    is_running = 0;
+     -:   501:  }
+     -:   502:
+     -:   503:  return is_running;
+     -:   504:}
+     -:   505:
+     -:   506:/// Delete a timer.
+     -:   507:/// \note API identical to osTimerDelete
+     -:   508:static osStatus_t svcRtxTimerDelete (osTimerId_t timer_id) {
+     -:   509:  os_timer_t        *timer = osRtxTimerId(timer_id);
+     -:   510:#ifdef RTX_SAFETY_CLASS
+     -:   511:  const os_thread_t *thread;
+     -:   512:#endif
+     -:   513:
+     -:   514:  // Check parameters
+     -:   515:  if (!IsTimerPtrValid(timer) || (timer->id != osRtxIdTimer)) {
+     -:   516:    EvrRtxTimerError(timer, (int32_t)osErrorParameter);
+     -:   517:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   518:    return osErrorParameter;
+     -:   519:  }
+     -:   520:
+     -:   521:#ifdef RTX_SAFETY_CLASS
+     -:   522:  // Check running thread safety class
+     -:   523:  thread = osRtxThreadGetRunning();
+     -:   524:  if ((thread != NULL) &&
+     -:   525:      ((thread->attr >> osRtxAttrClass_Pos) < (timer->attr >> osRtxAttrClass_Pos))) {
+     -:   526:    EvrRtxTimerError(timer, (int32_t)osErrorSafetyClass);
+     -:   527:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   528:    return osErrorSafetyClass;
+     -:   529:  }
+     -:   530:#endif
+     -:   531:
+     -:   532:  if (timer->state == osRtxTimerRunning) {
+     -:   533:    TimerRemove(timer);
+     -:   534:  }
+     -:   535:
+     -:   536:  osRtxTimerDestroy(timer);
+     -:   537:
+     -:   538:  return osOK;
+ #####:   539:}
+     -:   540:
+     -:   541://  Service Calls definitions
+     -:   542://lint ++flb "Library Begin" [MISRA Note 11]
+ #####:   543:SVC0_4(TimerNew,       osTimerId_t,  osTimerFunc_t, osTimerType_t, void *, const osTimerAttr_t *)
+     -:   544:SVC0_1(TimerGetName,   const char *, osTimerId_t)
+ #####:   545:SVC0_2(TimerStart,     osStatus_t,   osTimerId_t, uint32_t)
+ #####:   546:SVC0_1(TimerStop,      osStatus_t,   osTimerId_t)
+     -:   547:SVC0_1(TimerIsRunning, uint32_t,     osTimerId_t)
+     -:   548:SVC0_1(TimerDelete,    osStatus_t,   osTimerId_t)
+     -:   549://lint --flb "Library End"
+     -:   550:
+     -:   551:
+     -:   552://  ==== Public API ====
+     -:   553:
+     -:   554:/// Create and Initialize a timer.
+ #####:   555:osTimerId_t osTimerNew (osTimerFunc_t func, osTimerType_t type, void *argument, const osTimerAttr_t *attr) {
+     -:   556:  osTimerId_t timer_id;
+     -:   557:
+ #####:   558:  EvrRtxTimerNew(func, type, argument, attr);
+ #####:   559:  if (IsException() || IsIrqMasked()) {
+ #####:   560:    EvrRtxTimerError(NULL, (int32_t)osErrorISR);
+     -:   561:    timer_id = NULL;
+     -:   562:  } else {
+     -:   563:    timer_id = __svcTimerNew(func, type, argument, attr);
+     -:   564:  }
+ #####:   565:  return timer_id;
+     -:   566:}
+     -:   567:
+     -:   568:/// Get name of a timer.
+     -:   569:const char *osTimerGetName (osTimerId_t timer_id) {
+     -:   570:  const char *name;
+     -:   571:
+ #####:   572:  if (IsException() || IsIrqMasked()) {
+     -:   573:    name = svcRtxTimerGetName(timer_id);
+     -:   574:  } else {
+     -:   575:    name =  __svcTimerGetName(timer_id);
+     -:   576:  }
+ #####:   577:  return name;
+     -:   578:}
+     -:   579:
+     -:   580:/// Start or restart a timer.
+     -:   581:osStatus_t osTimerStart (osTimerId_t timer_id, uint32_t ticks) {
+     -:   582:  osStatus_t status;
+     -:   583:
+ #####:   584:  EvrRtxTimerStart(timer_id, ticks);
+ #####:   585:  if (IsException() || IsIrqMasked()) {
+     -:   586:    EvrRtxTimerError(timer_id, (int32_t)osErrorISR);
+     -:   587:    status = osErrorISR;
+     -:   588:  } else {
+     -:   589:    status = __svcTimerStart(timer_id, ticks);
+     -:   590:  }
+ #####:   591:  return status;
+     -:   592:}
+     -:   593:
+     -:   594:/// Stop a timer.
+     -:   595:osStatus_t osTimerStop (osTimerId_t timer_id) {
+     -:   596:  osStatus_t status;
+     -:   597:
+ #####:   598:  EvrRtxTimerStop(timer_id);
+ #####:   599:  if (IsException() || IsIrqMasked()) {
+     -:   600:    EvrRtxTimerError(timer_id, (int32_t)osErrorISR);
+     -:   601:    status = osErrorISR;
+     -:   602:  } else {
+     -:   603:    status = __svcTimerStop(timer_id);
+     -:   604:  }
+ #####:   605:  return status;
+     -:   606:}
+     -:   607:
+     -:   608:/// Check if a timer is running.
+     -:   609:uint32_t osTimerIsRunning (osTimerId_t timer_id) {
+     -:   610:  uint32_t is_running;
+     -:   611:
+ #####:   612:  if (IsException() || IsIrqMasked()) {
+     -:   613:    EvrRtxTimerIsRunning(timer_id, 0U);
+     -:   614:    is_running = 0U;
+     -:   615:  } else {
+     -:   616:    is_running = __svcTimerIsRunning(timer_id);
+     -:   617:  }
+     -:   618:  return is_running;
+     -:   619:}
+     -:   620:
+     -:   621:/// Delete a timer.
+     -:   622:osStatus_t osTimerDelete (osTimerId_t timer_id) {
+     -:   623:  osStatus_t status;
+     -:   624:
+     -:   625:  EvrRtxTimerDelete(timer_id);
+     -:   626:  if (IsException() || IsIrqMasked()) {
+     -:   627:    EvrRtxTimerError(timer_id, (int32_t)osErrorISR);
+     -:   628:    status = osErrorISR;
+     -:   629:  } else {
+     -:   630:    status = __svcTimerDelete(timer_id);
+     -:   631:  }
+     -:   632:  return status;
+     -:   633:}

@@ -1,0 +1,1012 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_core_cm.h
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       Cortex-M Core definitions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#ifndef RTX_CORE_CM_H_
+     -:    27:#define RTX_CORE_CM_H_
+     -:    28:
+     -:    29:#ifndef RTX_CORE_C_H_
+     -:    30:#ifndef RTE_COMPONENTS_H
+     -:    31:#include "RTE_Components.h"
+     -:    32:#endif
+     -:    33:#include CMSIS_device_header
+     -:    34:#endif
+     -:    35:
+     -:    36:#include <stdbool.h>
+     -:    37:typedef bool bool_t;
+     -:    38:
+     -:    39:#ifndef FALSE
+     -:    40:#define FALSE                   ((bool_t)0)
+     -:    41:#endif
+     -:    42:
+     -:    43:#ifndef TRUE
+     -:    44:#define TRUE                    ((bool_t)1)
+     -:    45:#endif
+     -:    46:
+     -:    47:#ifndef EXCLUSIVE_ACCESS
+     -:    48:#if   ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) || \
+     -:    49:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)) || \
+     -:    50:       (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0)) || \
+     -:    51:       (defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) || \
+     -:    52:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)))
+     -:    53:#define EXCLUSIVE_ACCESS        1
+     -:    54:#else
+     -:    55:#define EXCLUSIVE_ACCESS        0
+     -:    56:#endif
+     -:    57:#endif
+     -:    58:
+     -:    59:#define OS_TICK_HANDLER         SysTick_Handler
+     -:    60:
+     -:    61:/// xPSR_Initialization Value
+     -:    62:/// \param[in]  privileged      true=privileged, false=unprivileged
+     -:    63:/// \param[in]  thumb           true=Thumb, false=ARM
+     -:    64:/// \return                     xPSR Init Value
+     -:    65:__STATIC_INLINE uint32_t xPSR_InitVal (bool_t privileged, bool_t thumb) {
+     -:    66:  (void)privileged;
+     -:    67:  (void)thumb;
+     -:    68:  return (0x01000000U);
+     -:    69:}
+     -:    70:
+     -:    71:// Stack Frame:
+     -:    72://  - Extended: S16-S31, R4-R11, R0-R3, R12, LR, PC, xPSR, S0-S15, FPSCR
+     -:    73://  - Basic:             R4-R11, R0-R3, R12, LR, PC, xPSR
+     -:    74:
+     -:    75:/// Stack Frame Initialization Value (EXC_RETURN[7..0])
+     -:    76:#if (DOMAIN_NS == 1)
+     -:    77:#define STACK_FRAME_INIT_VAL    0xBCU
+     -:    78:#else
+     -:    79:#define STACK_FRAME_INIT_VAL    0xFDU
+     -:    80:#endif
+     -:    81:
+     -:    82:/// Stack Offset of Register R0
+     -:    83:/// \param[in]  stack_frame     Stack Frame (EXC_RETURN[7..0])
+     -:    84:/// \return                     R0 Offset
+     -:    85:__STATIC_INLINE uint32_t StackOffsetR0 (uint8_t stack_frame) {
+     -:    86:#if ((__FPU_USED == 1U) || \
+     -:    87:     (defined(__ARM_FEATURE_MVE) && (__ARM_FEATURE_MVE > 0)))
+     -:    88:  return (((stack_frame & 0x10U) == 0U) ? ((16U+8U)*4U) : (8U*4U));
+     -:    89:#else
+     -:    90:  (void)stack_frame;
+     -:    91:  return (8U*4U);
+     -:    92:#endif
+     -:    93:}
+     -:    94:
+     -:    95:
+     -:    96://  ==== Core functions ====
+     -:    97:
+     -:    98://lint -sem(__get_CONTROL, pure)
+     -:    99://lint -sem(__get_IPSR,    pure)
+     -:   100://lint -sem(__get_PRIMASK, pure)
+     -:   101://lint -sem(__get_BASEPRI, pure)
+     -:   102:
+     -:   103:/// Check if running Privileged
+     -:   104:/// \return     true=privileged, false=unprivileged
+     -:   105:__STATIC_INLINE bool_t IsPrivileged (void) {
+     -:   106:  return ((__get_CONTROL() & 1U) == 0U);
+     -:   107:}
+     -:   108:
+     -:   109:/// Set thread Privileged mode
+     -:   110:/// \param[in]  privileged      true=privileged, false=unprivileged
+     -:   111:__STATIC_INLINE void SetPrivileged (bool_t privileged) {
+ #####:   112:  if (privileged) {
+     -:   113:    // Privileged Thread mode & PSP
+     -:   114:    __set_CONTROL(0x02U);
+     -:   115:  } else {
+     -:   116:    // Unprivileged Thread mode & PSP
+     -:   117:    __set_CONTROL(0x03U);
+     -:   118:  }
+     -:   119:}
+     -:   120:
+     -:   121:/// Check if in Exception
+     -:   122:/// \return     true=exception, false=thread
+     -:   123:__STATIC_INLINE bool_t IsException (void) {
+     -:   124:  return (__get_IPSR() != 0U);
+     -:   125:}
+     -:   126:
+     -:   127:/// Check if in Fault
+     -:   128:/// \return     true, false
+     -:   129:__STATIC_INLINE bool_t IsFault (void) {
+     -:   130:  uint32_t ipsr = __get_IPSR();
+ #####:   131:  return (((int32_t)ipsr < ((int32_t)SVCall_IRQn + 16)) &&
+     -:   132:          ((int32_t)ipsr > ((int32_t)NonMaskableInt_IRQn + 16)));
+     -:   133:}
+     -:   134:
+     -:   135:/// Check if in SVCall IRQ
+     -:   136:/// \return     true, false
+     -:   137:__STATIC_INLINE bool_t IsSVCallIrq (void) {
+     -:   138:  return ((int32_t)__get_IPSR() == ((int32_t)SVCall_IRQn + 16));
+     -:   139:}
+     -:   140:
+     -:   141:/// Check if in PendSV IRQ
+     -:   142:/// \return     true, false
+     -:   143:__STATIC_INLINE bool_t IsPendSvIrq (void) {
+     -:   144:  return ((int32_t)__get_IPSR() == ((int32_t)PendSV_IRQn + 16));
+     -:   145:}
+     -:   146:
+     -:   147:/// Check if in Tick Timer IRQ
+     -:   148:/// \return     true, false
+     -:   149:__STATIC_INLINE bool_t IsTickIrq (int32_t tick_irqn) {
+ #####:   150:  return ((int32_t)__get_IPSR() == (tick_irqn + 16));
+     -:   151:}
+     -:   152:
+     -:   153:/// Check if IRQ is Masked
+     -:   154:/// \return     true=masked, false=not masked
+     -:   155:__STATIC_INLINE bool_t IsIrqMasked (void) {
+     -:   156:#if   ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) || \
+     -:   157:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)) || \
+     -:   158:       (defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) || \
+     -:   159:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)))
+ #####:   160:  return ((__get_PRIMASK() != 0U) || (__get_BASEPRI() != 0U));
+     -:   161:#else
+     -:   162:  return  (__get_PRIMASK() != 0U);
+     -:   163:#endif
+     -:   164:}
+     -:   165:
+     -:   166:
+     -:   167://  ==== Core Peripherals functions ====
+     -:   168:
+     -:   169:/// Setup SVC and PendSV System Service Calls
+     -:   170:__STATIC_INLINE void SVC_Setup (void) {
+     -:   171:#if   ((defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) || \
+     -:   172:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)) || \
+     -:   173:       (defined(__CORTEX_M)             && (__CORTEX_M == 7U)))
+     -:   174:  uint32_t p, n;
+     -:   175:
+     -:   176:  SCB->SHPR[10] = 0xFFU;
+     -:   177:  n = 32U - (uint32_t)__CLZ(~(SCB->SHPR[10] | 0xFFFFFF00U));
+     -:   178:  p = NVIC_GetPriorityGrouping();
+     -:   179:  if (p >= n) {
+     -:   180:    n = p + 1U;
+     -:   181:  }
+     -:   182:  SCB->SHPR[7] = (uint8_t)(0xFEU << n);
+     -:   183:#elif  (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0))
+     -:   184:  uint32_t n;
+     -:   185:
+     -:   186:  SCB->SHPR[1] |= 0x00FF0000U;
+     -:   187:  n = SCB->SHPR[1];
+     -:   188:  SCB->SHPR[0] |= (n << (8+1)) & 0xFC000000U;
+     -:   189:#elif ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) || \
+     -:   190:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)))
+     -:   191:  uint32_t p, n;
+     -:   192:
+     1:   193:  SCB->SHPR[10] = 0xFFU;
+     1:   194:  n = 32U - (uint32_t)__CLZ(~(SCB->SHPR[10] | 0xFFFFFF00U));
+     -:   195:  p = NVIC_GetPriorityGrouping();
+     1:   196:  if (p >= n) {
+     -:   197:    n = p + 1U;
+     -:   198:  }
+     1:   199:  SCB->SHPR[7] = (uint8_t)(0xFEU << n);
+     -:   200:#elif  (defined(__ARM_ARCH_6M__)        && (__ARM_ARCH_6M__        != 0))
+     -:   201:  uint32_t n;
+     -:   202:
+     -:   203:  SCB->SHPR[1] |= 0x00FF0000U;
+     -:   204:  n = SCB->SHPR[1];
+     -:   205:  SCB->SHPR[0] |= (n << (8+1)) & 0xFC000000U;
+     -:   206:#endif
+     -:   207:}
+     -:   208:
+     -:   209:/// Get Pending SV (Service Call) Flag
+     -:   210:/// \return     Pending SV Flag
+     -:   211:__STATIC_INLINE uint8_t GetPendSV (void) {
+ #####:   212:  return ((uint8_t)((SCB->ICSR & (SCB_ICSR_PENDSVSET_Msk)) >> 24));
+     -:   213:}
+     -:   214:
+     -:   215:/// Clear Pending SV (Service Call) Flag
+     -:   216:__STATIC_INLINE void ClrPendSV (void) {
+     -:   217:  SCB->ICSR = SCB_ICSR_PENDSVCLR_Msk;
+     -:   218:}
+     -:   219:
+     -:   220:/// Set Pending SV (Service Call) Flag
+     -:   221:__STATIC_INLINE void SetPendSV (void) {
+ #####:   222:  SCB->ICSR = SCB_ICSR_PENDSVSET_Msk;
+     -:   223:}
+     -:   224:
+     -:   225:
+     -:   226://  ==== Service Calls definitions ====
+     -:   227:
+     -:   228://lint -save -e9023 -e9024 -e9026 "Function-like macros using '#/##'" [MISRA Note 10]
+     -:   229:
+     -:   230:#if defined(__ICCARM__)
+     -:   231:
+     -:   232:#if defined(RTX_SVC_PTR_CHECK)
+     -:   233:#warning "SVC Function Pointer checking is not supported!"
+     -:   234:#endif
+     -:   235:
+     -:   236:#if   ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) ||   \
+     -:   237:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)) ||   \
+     -:   238:       (defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) ||   \
+     -:   239:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)))
+     -:   240:#define SVC_ArgF(f)                                                            \
+     -:   241:  __asm(                                                                       \
+     -:   242:    "mov r12,%0\n"                                                             \
+     -:   243:    :: "r"(&f): "r12"                                                          \
+     -:   244:  );
+     -:   245:#elif ((defined(__ARM_ARCH_6M__)        && (__ARM_ARCH_6M__        != 0)) ||   \
+     -:   246:       (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0)))
+     -:   247:#define SVC_ArgF(f)                                                            \
+     -:   248:  __asm(                                                                       \
+     -:   249:    "mov r7,%0\n"                                                              \
+     -:   250:    :: "r"(&f): "r7"                                                           \
+     -:   251:  );
+     -:   252:#endif
+     -:   253:
+     -:   254:#define STRINGIFY(a) #a
+     -:   255:#define SVC_INDIRECT(n) _Pragma(STRINGIFY(svc_number = n)) __svc
+     -:   256:
+     -:   257:#define SVC0_0N(f,t)                                                           \
+     -:   258:SVC_INDIRECT(0) t    svc##f ();                                                \
+     -:   259:__attribute__((always_inline))                                                 \
+     -:   260:__STATIC_INLINE t  __svc##f (void) {                                           \
+     -:   261:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   262:  svc##f();                                                                    \
+     -:   263:}
+     -:   264:
+     -:   265:#define SVC0_0(f,t)                                                            \
+     -:   266:SVC_INDIRECT(0) t    svc##f ();                                                \
+     -:   267:__attribute__((always_inline))                                                 \
+     -:   268:__STATIC_INLINE t  __svc##f (void) {                                           \
+     -:   269:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   270:  return svc##f();                                                             \
+     -:   271:}
+     -:   272:
+     -:   273:#define SVC0_1N(f,t,t1)                                                        \
+     -:   274:SVC_INDIRECT(0) t    svc##f (t1 a1);                                           \
+     -:   275:__attribute__((always_inline))                                                 \
+     -:   276:__STATIC_INLINE t  __svc##f (t1 a1) {                                          \
+     -:   277:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   278:  svc##f(a1);                                                                  \
+     -:   279:}
+     -:   280:
+     -:   281:#define SVC0_1(f,t,t1)                                                         \
+     -:   282:SVC_INDIRECT(0) t    svc##f (t1 a1);                                           \
+     -:   283:__attribute__((always_inline))                                                 \
+     -:   284:__STATIC_INLINE t  __svc##f (t1 a1) {                                          \
+     -:   285:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   286:  return svc##f(a1);                                                           \
+     -:   287:}
+     -:   288:
+     -:   289:#define SVC0_2(f,t,t1,t2)                                                      \
+     -:   290:SVC_INDIRECT(0) t    svc##f (t1 a1, t2 a2);                                    \
+     -:   291:__attribute__((always_inline))                                                 \
+     -:   292:__STATIC_INLINE t  __svc##f (t1 a1, t2 a2) {                                   \
+     -:   293:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   294:  return svc##f(a1,a2);                                                        \
+     -:   295:}
+     -:   296:
+     -:   297:#define SVC0_3(f,t,t1,t2,t3)                                                   \
+     -:   298:SVC_INDIRECT(0) t    svc##f (t1 a1, t2 a2, t3 a3);                             \
+     -:   299:__attribute__((always_inline))                                                 \
+     -:   300:__STATIC_INLINE t  __svc##f (t1 a1, t2 a2, t3 a3) {                            \
+     -:   301:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   302:  return svc##f(a1,a2,a3);                                                     \
+     -:   303:}
+     -:   304:
+     -:   305:#define SVC0_4(f,t,t1,t2,t3,t4)                                                \
+     -:   306:SVC_INDIRECT(0) t    svc##f (t1 a1, t2 a2, t3 a3, t4 a4);                      \
+     -:   307:__attribute__((always_inline))                                                 \
+     -:   308:__STATIC_INLINE t  __svc##f (t1 a1, t2 a2, t3 a3, t4 a4) {                     \
+     -:   309:  SVC_ArgF(svcRtx##f);                                                         \
+     -:   310:  return svc##f(a1,a2,a3,a4);                                                  \
+     -:   311:}
+     -:   312:
+     -:   313:#else   // !defined(__ICCARM__)
+     -:   314:
+     -:   315://lint -esym(522,__svc*) "Functions '__svc*' are impure (side-effects)"
+     -:   316:
+     -:   317:#if   ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) ||   \
+     -:   318:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)) ||   \
+     -:   319:       (defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) ||   \
+     -:   320:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)))
+     -:   321:#define SVC_RegF "r12"
+     -:   322:#elif ((defined(__ARM_ARCH_6M__)        && (__ARM_ARCH_6M__        != 0)) ||   \
+     -:   323:       (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0)))
+     -:   324:#define SVC_RegF "r7"
+     -:   325:#endif
+     -:   326:
+     -:   327:#define SVC_ArgN(n) \
+     -:   328:register uint32_t __r##n __ASM("r"#n)
+     -:   329:
+     -:   330:#define SVC_ArgR(n,a) \
+     -:   331:register uint32_t __r##n __ASM("r"#n) = (uint32_t)a
+     -:   332:
+     -:   333:#if    (defined(RTX_SVC_PTR_CHECK) && !defined(_lint))
+     -:   334:#define SVC_ArgF(f) \
+     -:   335:register uint32_t __rf   __ASM(SVC_RegF) = (uint32_t)jmpRtx##f
+     -:   336:#else
+     -:   337:#define SVC_ArgF(f) \
+     -:   338:register uint32_t __rf   __ASM(SVC_RegF) = (uint32_t)svcRtx##f
+     -:   339:#endif
+     -:   340:
+     -:   341:#define SVC_In0 "r"(__rf)
+     -:   342:#define SVC_In1 "r"(__rf),"r"(__r0)
+     -:   343:#define SVC_In2 "r"(__rf),"r"(__r0),"r"(__r1)
+     -:   344:#define SVC_In3 "r"(__rf),"r"(__r0),"r"(__r1),"r"(__r2)
+     -:   345:#define SVC_In4 "r"(__rf),"r"(__r0),"r"(__r1),"r"(__r2),"r"(__r3)
+     -:   346:
+     -:   347:#define SVC_Out0
+     -:   348:#define SVC_Out1 "=r"(__r0)
+     -:   349:
+     -:   350:#define SVC_CL0
+     -:   351:#define SVC_CL1 "r0"
+     -:   352:
+     -:   353:#define SVC_Call0(in, out, cl)                                                 \
+     -:   354:  __ASM volatile ("svc 0" : out : in : cl)
+     -:   355:
+     -:   356:#if    (defined(RTX_SVC_PTR_CHECK) && !defined(_lint))
+     -:   357:#if   ((defined(__ARM_ARCH_7M__)        && (__ARM_ARCH_7M__        != 0)) ||   \
+     -:   358:       (defined(__ARM_ARCH_7EM__)       && (__ARM_ARCH_7EM__       != 0)) ||   \
+     -:   359:       (defined(__ARM_ARCH_8M_MAIN__)   && (__ARM_ARCH_8M_MAIN__   != 0)) ||   \
+     -:   360:       (defined(__ARM_ARCH_8_1M_MAIN__) && (__ARM_ARCH_8_1M_MAIN__ != 0)))
+     -:   361:#define SVC_Jump(f)                                                            \
+     -:   362:  __ASM volatile (                                                             \
+     -:   363:    ".align 2\n\t"                                                             \
+     -:   364:    "b.w %[adr]" : : [adr] "X" (f)                                             \
+     -:   365:  )
+     -:   366:#elif ((defined(__ARM_ARCH_6M__)        && (__ARM_ARCH_6M__        != 0)) ||   \
+     -:   367:       (defined(__ARM_ARCH_8M_BASE__)   && (__ARM_ARCH_8M_BASE__   != 0)))
+     -:   368:#define SVC_Jump(f)                                                            \
+     -:   369:  __ASM volatile (                                                             \
+     -:   370:    ".align 3\n\t"                                                             \
+     -:   371:    "ldr r7,1f\n\t"                                                            \
+     -:   372:    "bx  r7\n"                                                                 \
+     -:   373:    "1: .word %[adr]" : : [adr] "X" (f)                                        \
+     -:   374:  )
+     -:   375:#endif
+     -:   376:#define SVC_Veneer_Prototye(f)                                                 \
+     -:   377:__STATIC_INLINE void jmpRtx##f (void);
+     -:   378:#define SVC_Veneer_Function(f)                                                 \
+     -:   379:__attribute__((naked,section(".text.os.svc.veneer."#f)))                       \
+     -:   380:__STATIC_INLINE void jmpRtx##f (void) {                                        \
+     -:   381:  SVC_Jump(svcRtx##f);                                                         \
+     -:   382:}
+     -:   383:#else
+     -:   384:#define SVC_Veneer_Prototye(f)
+     -:   385:#define SVC_Veneer_Function(f)
+     -:   386:#endif
+     -:   387:
+     -:   388:#define SVC0_0N(f,t)                                                           \
+     -:   389:SVC_Veneer_Prototye(f)                                                         \
+     -:   390:__attribute__((always_inline))                                                 \
+     -:   391:__STATIC_INLINE t __svc##f (void) {                                            \
+     -:   392:  SVC_ArgF(f);                                                                 \
+     -:   393:  SVC_Call0(SVC_In0, SVC_Out0, SVC_CL1);                                       \
+     -:   394:}                                                                              \
+     -:   395:SVC_Veneer_Function(f)
+     -:   396:
+     -:   397:#define SVC0_0(f,t)                                                            \
+     -:   398:SVC_Veneer_Prototye(f)                                                         \
+     -:   399:__attribute__((always_inline))                                                 \
+     -:   400:__STATIC_INLINE t __svc##f (void) {                                            \
+     -:   401:  SVC_ArgN(0);                                                                 \
+     -:   402:  SVC_ArgF(f);                                                                 \
+     -:   403:  SVC_Call0(SVC_In0, SVC_Out1, SVC_CL0);                                       \
+     -:   404:  return (t) __r0;                                                             \
+     -:   405:}                                                                              \
+     -:   406:SVC_Veneer_Function(f)
+     -:   407:
+     -:   408:#define SVC0_1N(f,t,t1)                                                        \
+     -:   409:SVC_Veneer_Prototye(f)                                                         \
+     -:   410:__attribute__((always_inline))                                                 \
+     -:   411:__STATIC_INLINE t __svc##f (t1 a1) {                                           \
+     -:   412:  SVC_ArgR(0,a1);                                                              \
+     -:   413:  SVC_ArgF(f);                                                                 \
+     -:   414:  SVC_Call0(SVC_In1, SVC_Out1, SVC_CL0);                                       \
+     -:   415:}                                                                              \
+     -:   416:SVC_Veneer_Function(f)
+     -:   417:
+     -:   418:#define SVC0_1(f,t,t1)                                                         \
+     -:   419:SVC_Veneer_Prototye(f)                                                         \
+     -:   420:__attribute__((always_inline))                                                 \
+     -:   421:__STATIC_INLINE t __svc##f (t1 a1) {                                           \
+     -:   422:  SVC_ArgR(0,a1);                                                              \
+     -:   423:  SVC_ArgF(f);                                                                 \
+     -:   424:  SVC_Call0(SVC_In1, SVC_Out1, SVC_CL0);                                       \
+     -:   425:  return (t) __r0;                                                             \
+     -:   426:}                                                                              \
+     -:   427:SVC_Veneer_Function(f)
+     -:   428:
+     -:   429:#define SVC0_2(f,t,t1,t2)                                                      \
+     -:   430:SVC_Veneer_Prototye(f)                                                         \
+     -:   431:__attribute__((always_inline))                                                 \
+     -:   432:__STATIC_INLINE t __svc##f (t1 a1, t2 a2) {                                    \
+     -:   433:  SVC_ArgR(0,a1);                                                              \
+     -:   434:  SVC_ArgR(1,a2);                                                              \
+     -:   435:  SVC_ArgF(f);                                                                 \
+     -:   436:  SVC_Call0(SVC_In2, SVC_Out1, SVC_CL0);                                       \
+     -:   437:  return (t) __r0;                                                             \
+     -:   438:}                                                                              \
+     -:   439:SVC_Veneer_Function(f)
+     -:   440:
+     -:   441:#define SVC0_3(f,t,t1,t2,t3)                                                   \
+     -:   442:SVC_Veneer_Prototye(f)                                                         \
+     -:   443:__attribute__((always_inline))                                                 \
+     -:   444:__STATIC_INLINE t __svc##f (t1 a1, t2 a2, t3 a3) {                             \
+     -:   445:  SVC_ArgR(0,a1);                                                              \
+     -:   446:  SVC_ArgR(1,a2);                                                              \
+     -:   447:  SVC_ArgR(2,a3);                                                              \
+     -:   448:  SVC_ArgF(f);                                                                 \
+     -:   449:  SVC_Call0(SVC_In3, SVC_Out1, SVC_CL0);                                       \
+     -:   450:  return (t) __r0;                                                             \
+     -:   451:}                                                                              \
+     -:   452:SVC_Veneer_Function(f)
+     -:   453:
+     -:   454:#define SVC0_4(f,t,t1,t2,t3,t4)                                                \
+     -:   455:SVC_Veneer_Prototye(f)                                                         \
+     -:   456:__attribute__((always_inline))                                                 \
+     -:   457:__STATIC_INLINE t __svc##f (t1 a1, t2 a2, t3 a3, t4 a4) {                      \
+     -:   458:  SVC_ArgR(0,a1);                                                              \
+     -:   459:  SVC_ArgR(1,a2);                                                              \
+     -:   460:  SVC_ArgR(2,a3);                                                              \
+     -:   461:  SVC_ArgR(3,a4);                                                              \
+     -:   462:  SVC_ArgF(f);                                                                 \
+     -:   463:  SVC_Call0(SVC_In4, SVC_Out1, SVC_CL0);                                       \
+     -:   464:  return (t) __r0;                                                             \
+     -:   465:}                                                                              \
+     -:   466:SVC_Veneer_Function(f)
+     -:   467:
+     -:   468:#endif
+     -:   469:
+     -:   470://lint -restore [MISRA Note 10]
+     -:   471:
+     -:   472:
+     -:   473://  ==== Exclusive Access Operation ====
+     -:   474:
+     -:   475:#if (EXCLUSIVE_ACCESS == 1)
+     -:   476:
+     -:   477://lint ++flb "Library Begin" [MISRA Note 12]
+     -:   478:
+     -:   479:/// Atomic Access Operation: Write (8-bit)
+     -:   480:/// \param[in]  mem             Memory address
+     -:   481:/// \param[in]  val             Value to write
+     -:   482:/// \return                     Previous value
+     -:   483:__STATIC_INLINE uint8_t atomic_wr8 (uint8_t *mem, uint8_t val) {
+     -:   484:#ifdef  __ICCARM__
+     -:   485:#pragma diag_suppress=Pe550
+     -:   486:#endif
+     -:   487:  register uint32_t res;
+     -:   488:#ifdef  __ICCARM__
+     -:   489:#pragma diag_default=Pe550
+     -:   490:#endif
+     -:   491:  register uint8_t  ret;
+     -:   492:
+ #####:   493:  __ASM volatile (
+     -:   494:#ifndef __ICCARM__
+     -:   495:  ".syntax unified\n\t"
+     -:   496:#endif
+     -:   497:  "1:\n\t"
+     -:   498:    "ldrexb %[ret],[%[mem]]\n\t"
+     -:   499:    "strexb %[res],%[val],[%[mem]]\n\t"
+     -:   500:    "cbz    %[res],2f\n\t"
+     -:   501:    "b       1b\n"
+     -:   502:  "2:"
+     -:   503:  : [ret] "=&l" (ret),
+     -:   504:    [res] "=&l" (res)
+     -:   505:  : [mem] "l"   (mem),
+     -:   506:    [val] "l"   (val)
+     -:   507:  : "memory"
+     -:   508:  );
+     -:   509:
+     -:   510:  return ret;
+     -:   511:}
+     -:   512:
+     -:   513:/// Atomic Access Operation: Set bits (32-bit)
+     -:   514:/// \param[in]  mem             Memory address
+     -:   515:/// \param[in]  bits            Bit mask
+     -:   516:/// \return                     New value
+     -:   517:__STATIC_INLINE uint32_t atomic_set32 (uint32_t *mem, uint32_t bits) {
+     -:   518:#ifdef  __ICCARM__
+     -:   519:#pragma diag_suppress=Pe550
+     -:   520:#endif
+     -:   521:  register uint32_t val, res;
+     -:   522:#ifdef  __ICCARM__
+     -:   523:#pragma diag_default=Pe550
+     -:   524:#endif
+     -:   525:  register uint32_t ret;
+     -:   526:
+ #####:   527:  __ASM volatile (
+     -:   528:#ifndef __ICCARM__
+     -:   529:  ".syntax unified\n\t"
+     -:   530:#endif
+     -:   531:  "1:\n\t"
+     -:   532:    "ldrex %[val],[%[mem]]\n\t"
+     -:   533:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   534:    "mov   %[ret],%[val]\n\t"
+     -:   535:    "orrs  %[ret],%[bits]\n\t"
+     -:   536:#else
+     -:   537:    "orr   %[ret],%[val],%[bits]\n\t"
+     -:   538:#endif
+     -:   539:    "strex %[res],%[ret],[%[mem]]\n\t"
+     -:   540:    "cbz   %[res],2f\n\t"
+     -:   541:    "b     1b\n"
+     -:   542:  "2:"
+     -:   543:  : [ret]  "=&l" (ret),
+     -:   544:    [val]  "=&l" (val),
+     -:   545:    [res]  "=&l" (res)
+     -:   546:  : [mem]  "l"   (mem),
+     -:   547:    [bits] "l"   (bits)
+     -:   548:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   549:  : "memory", "cc"
+     -:   550:#else
+     -:   551:  : "memory"
+     -:   552:#endif
+     -:   553:  );
+     -:   554:
+     -:   555:  return ret;
+     -:   556:}
+     -:   557:
+     -:   558:/// Atomic Access Operation: Clear bits (32-bit)
+     -:   559:/// \param[in]  mem             Memory address
+     -:   560:/// \param[in]  bits            Bit mask
+     -:   561:/// \return                     Previous value
+     -:   562:__STATIC_INLINE uint32_t atomic_clr32 (uint32_t *mem, uint32_t bits) {
+     -:   563:#ifdef  __ICCARM__
+     -:   564:#pragma diag_suppress=Pe550
+     -:   565:#endif
+     -:   566:  register uint32_t val, res;
+     -:   567:#ifdef  __ICCARM__
+     -:   568:#pragma diag_default=Pe550
+     -:   569:#endif
+     -:   570:  register uint32_t ret;
+     -:   571:
+ #####:   572:  __ASM volatile (
+     -:   573:#ifndef __ICCARM__
+     -:   574:  ".syntax unified\n\t"
+     -:   575:#endif
+     -:   576:  "1:\n\t"
+     -:   577:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   578:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   579:    "mov   %[val],%[ret]\n\t"
+     -:   580:    "bics  %[val],%[bits]\n\t"
+     -:   581:#else
+     -:   582:    "bic   %[val],%[ret],%[bits]\n\t"
+     -:   583:#endif
+     -:   584:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   585:    "cbz   %[res],2f\n\t"
+     -:   586:    "b     1b\n"
+     -:   587:  "2:"
+     -:   588:  : [ret]  "=&l" (ret),
+     -:   589:    [val]  "=&l" (val),
+     -:   590:    [res]  "=&l" (res)
+     -:   591:  : [mem]  "l"   (mem),
+     -:   592:    [bits] "l"   (bits)
+     -:   593:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   594:  : "memory", "cc"
+     -:   595:#else
+     -:   596:  : "memory"
+     -:   597:#endif
+     -:   598:  );
+     -:   599:
+     -:   600:  return ret;
+     -:   601:}
+     -:   602:
+     -:   603:/// Atomic Access Operation: Check if all specified bits (32-bit) are active and clear them
+     -:   604:/// \param[in]  mem             Memory address
+     -:   605:/// \param[in]  bits            Bit mask
+     -:   606:/// \return                     Active bits before clearing or 0 if not active
+     -:   607:__STATIC_INLINE uint32_t atomic_chk32_all (uint32_t *mem, uint32_t bits) {
+     -:   608:#ifdef  __ICCARM__
+     -:   609:#pragma diag_suppress=Pe550
+     -:   610:#endif
+     -:   611:  register uint32_t val, res;
+     -:   612:#ifdef  __ICCARM__
+     -:   613:#pragma diag_default=Pe550
+     -:   614:#endif
+     -:   615:  register uint32_t ret;
+     -:   616:
+ #####:   617:  __ASM volatile (
+     -:   618:#ifndef __ICCARM__
+     -:   619:  ".syntax unified\n\t"
+     -:   620:#endif
+     -:   621:  "1:\n\t"
+     -:   622:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   623:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   624:    "mov   %[val],%[ret]\n\t"
+     -:   625:    "ands  %[val],%[bits]\n\t"
+     -:   626:#else
+     -:   627:    "and   %[val],%[ret],%[bits]\n\t"
+     -:   628:#endif
+     -:   629:    "cmp   %[val],%[bits]\n\t"
+     -:   630:    "beq   2f\n\t"
+     -:   631:    "clrex\n\t"
+     -:   632:    "movs  %[ret],#0\n\t"
+     -:   633:    "b     3f\n"
+     -:   634:  "2:\n\t"
+     -:   635:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   636:    "mov   %[val],%[ret]\n\t"
+     -:   637:    "bics  %[val],%[bits]\n\t"
+     -:   638:#else
+     -:   639:    "bic   %[val],%[ret],%[bits]\n\t"
+     -:   640:#endif
+     -:   641:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   642:    "cbz   %[res],3f\n\t"
+     -:   643:    "b     1b\n"
+     -:   644:  "3:"
+     -:   645:  : [ret]  "=&l" (ret),
+     -:   646:    [val]  "=&l" (val),
+     -:   647:    [res]  "=&l" (res)
+     -:   648:  : [mem]  "l"   (mem),
+     -:   649:    [bits] "l"   (bits)
+     -:   650:  : "cc", "memory"
+     -:   651:  );
+     -:   652:
+     -:   653:  return ret;
+     -:   654:}
+     -:   655:
+     -:   656:/// Atomic Access Operation: Check if any specified bits (32-bit) are active and clear them
+     -:   657:/// \param[in]  mem             Memory address
+     -:   658:/// \param[in]  bits            Bit mask
+     -:   659:/// \return                     Active bits before clearing or 0 if not active
+     -:   660:__STATIC_INLINE uint32_t atomic_chk32_any (uint32_t *mem, uint32_t bits) {
+     -:   661:#ifdef  __ICCARM__
+     -:   662:#pragma diag_suppress=Pe550
+     -:   663:#endif
+     -:   664:  register uint32_t val, res;
+     -:   665:#ifdef  __ICCARM__
+     -:   666:#pragma diag_default=Pe550
+     -:   667:#endif
+     -:   668:  register uint32_t ret;
+     -:   669:
+ #####:   670:  __ASM volatile (
+     -:   671:#ifndef __ICCARM__
+     -:   672:  ".syntax unified\n\t"
+     -:   673:#endif
+     -:   674:  "1:\n\t"
+     -:   675:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   676:    "tst   %[ret],%[bits]\n\t"
+     -:   677:    "bne   2f\n\t"
+     -:   678:    "clrex\n\t"
+     -:   679:    "movs  %[ret],#0\n\t"
+     -:   680:    "b     3f\n"
+     -:   681:  "2:\n\t"
+     -:   682:#if (defined(__ARM_ARCH_8M_BASE__) && (__ARM_ARCH_8M_BASE__ != 0))
+     -:   683:    "mov   %[val],%[ret]\n\t"
+     -:   684:    "bics  %[val],%[bits]\n\t"
+     -:   685:#else
+     -:   686:    "bic   %[val],%[ret],%[bits]\n\t"
+     -:   687:#endif
+     -:   688:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   689:    "cbz   %[res],3f\n\t"
+     -:   690:    "b     1b\n"
+     -:   691:  "3:"
+     -:   692:  : [ret]  "=&l" (ret),
+     -:   693:    [val]  "=&l" (val),
+     -:   694:    [res]  "=&l" (res)
+     -:   695:  : [mem]  "l"   (mem),
+     -:   696:    [bits] "l"   (bits)
+     -:   697:  : "cc", "memory"
+     -:   698:  );
+     -:   699:
+     -:   700:  return ret;
+     -:   701:}
+     -:   702:
+     -:   703:/// Atomic Access Operation: Increment (32-bit)
+     -:   704:/// \param[in]  mem             Memory address
+     -:   705:/// \return                     Previous value
+     -:   706:__STATIC_INLINE uint32_t atomic_inc32 (uint32_t *mem) {
+     -:   707:#ifdef  __ICCARM__
+     -:   708:#pragma diag_suppress=Pe550
+     -:   709:#endif
+     -:   710:  register uint32_t val, res;
+     -:   711:#ifdef  __ICCARM__
+     -:   712:#pragma diag_default=Pe550
+     -:   713:#endif
+     -:   714:  register uint32_t ret;
+     -:   715:
+ #####:   716:  __ASM volatile (
+     -:   717:#ifndef __ICCARM__
+     -:   718:  ".syntax unified\n\t"
+     -:   719:#endif
+     -:   720:  "1:\n\t"
+     -:   721:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   722:    "adds  %[val],%[ret],#1\n\t"
+     -:   723:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   724:    "cbz   %[res],2f\n\t"
+     -:   725:    "b     1b\n"
+     -:   726:  "2:"
+     -:   727:  : [ret] "=&l" (ret),
+     -:   728:    [val] "=&l" (val),
+     -:   729:    [res] "=&l" (res)
+     -:   730:  : [mem] "l"   (mem)
+     -:   731:  : "cc", "memory"
+     -:   732:  );
+     -:   733:
+     -:   734:  return ret;
+     -:   735:}
+     -:   736:
+     -:   737:/// Atomic Access Operation: Increment (16-bit) if Less Than
+     -:   738:/// \param[in]  mem             Memory address
+     -:   739:/// \param[in]  max             Maximum value
+     -:   740:/// \return                     Previous value
+     -:   741:__STATIC_INLINE uint16_t atomic_inc16_lt (uint16_t *mem, uint16_t max) {
+     -:   742:#ifdef  __ICCARM__
+     -:   743:#pragma diag_suppress=Pe550
+     -:   744:#endif
+     -:   745:  register uint32_t val, res;
+     -:   746:#ifdef  __ICCARM__
+     -:   747:#pragma diag_default=Pe550
+     -:   748:#endif
+     -:   749:  register uint16_t ret;
+     -:   750:
+ #####:   751:  __ASM volatile (
+     -:   752:#ifndef __ICCARM__
+     -:   753:  ".syntax unified\n\t"
+     -:   754:#endif
+     -:   755:  "1:\n\t"
+     -:   756:    "ldrexh %[ret],[%[mem]]\n\t"
+     -:   757:    "cmp    %[max],%[ret]\n\t"
+     -:   758:    "bhi    2f\n\t"
+     -:   759:    "clrex\n\t"
+     -:   760:    "b      3f\n"
+     -:   761:  "2:\n\t"
+     -:   762:    "adds   %[val],%[ret],#1\n\t"
+     -:   763:    "strexh %[res],%[val],[%[mem]]\n\t"
+     -:   764:    "cbz    %[res],3f\n\t"
+     -:   765:    "b      1b\n"
+     -:   766:  "3:"
+     -:   767:  : [ret] "=&l" (ret),
+     -:   768:    [val] "=&l" (val),
+     -:   769:    [res] "=&l" (res)
+     -:   770:  : [mem] "l"   (mem),
+     -:   771:    [max] "l"   (max)
+     -:   772:  : "cc", "memory"
+     -:   773:  );
+     -:   774:
+     -:   775:  return ret;
+     -:   776:}
+     -:   777:
+     -:   778:/// Atomic Access Operation: Increment (16-bit) and clear on Limit
+     -:   779:/// \param[in]  mem             Memory address
+     -:   780:/// \param[in]  max             Maximum value
+     -:   781:/// \return                     Previous value
+     -:   782:__STATIC_INLINE uint16_t atomic_inc16_lim (uint16_t *mem, uint16_t lim) {
+     -:   783:#ifdef  __ICCARM__
+     -:   784:#pragma diag_suppress=Pe550
+     -:   785:#endif
+     -:   786:  register uint32_t val, res;
+     -:   787:#ifdef  __ICCARM__
+     -:   788:#pragma diag_default=Pe550
+     -:   789:#endif
+     -:   790:  register uint16_t ret;
+     -:   791:
+ #####:   792:  __ASM volatile (
+     -:   793:#ifndef __ICCARM__
+     -:   794:  ".syntax unified\n\t"
+     -:   795:#endif
+     -:   796:  "1:\n\t"
+     -:   797:    "ldrexh %[ret],[%[mem]]\n\t"
+     -:   798:    "adds   %[val],%[ret],#1\n\t"
+     -:   799:    "cmp    %[lim],%[val]\n\t"
+     -:   800:    "bhi    2f\n\t"
+     -:   801:    "movs   %[val],#0\n"
+     -:   802:  "2:\n\t"
+     -:   803:    "strexh %[res],%[val],[%[mem]]\n\t"
+     -:   804:    "cbz    %[res],3f\n\t"
+     -:   805:    "b      1b\n"
+     -:   806:  "3:"
+     -:   807:  : [ret] "=&l" (ret),
+     -:   808:    [val] "=&l" (val),
+     -:   809:    [res] "=&l" (res)
+     -:   810:  : [mem] "l"   (mem),
+     -:   811:    [lim] "l"   (lim)
+     -:   812:  : "cc", "memory"
+     -:   813:  );
+     -:   814:
+     -:   815:  return ret;
+     -:   816:}
+     -:   817:
+     -:   818:/// Atomic Access Operation: Decrement (32-bit)
+     -:   819:/// \param[in]  mem             Memory address
+     -:   820:/// \return                     Previous value
+     -:   821:__STATIC_INLINE uint32_t atomic_dec32 (uint32_t *mem) {
+     -:   822:#ifdef  __ICCARM__
+     -:   823:#pragma diag_suppress=Pe550
+     -:   824:#endif
+     -:   825:  register uint32_t val, res;
+     -:   826:#ifdef  __ICCARM__
+     -:   827:#pragma diag_default=Pe550
+     -:   828:#endif
+     -:   829:  register uint32_t ret;
+     -:   830:
+ #####:   831:  __ASM volatile (
+     -:   832:#ifndef __ICCARM__
+     -:   833:  ".syntax unified\n\t"
+     -:   834:#endif
+     -:   835:  "1:\n\t"
+     -:   836:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   837:    "subs  %[val],%[ret],#1\n\t"
+     -:   838:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   839:    "cbz   %[res],2f\n\t"
+     -:   840:    "b     1b\n"
+     -:   841:  "2:"
+     -:   842:  : [ret] "=&l" (ret),
+     -:   843:    [val] "=&l" (val),
+     -:   844:    [res] "=&l" (res)
+     -:   845:  : [mem] "l"   (mem)
+     -:   846:  : "cc", "memory"
+     -:   847:  );
+     -:   848:
+     -:   849:  return ret;
+     -:   850:}
+     -:   851:
+     -:   852:/// Atomic Access Operation: Decrement (32-bit) if Not Zero
+     -:   853:/// \param[in]  mem             Memory address
+     -:   854:/// \return                     Previous value
+     -:   855:__STATIC_INLINE uint32_t atomic_dec32_nz (uint32_t *mem) {
+     -:   856:#ifdef  __ICCARM__
+     -:   857:#pragma diag_suppress=Pe550
+     -:   858:#endif
+     -:   859:  register uint32_t val, res;
+     -:   860:#ifdef  __ICCARM__
+     -:   861:#pragma diag_default=Pe550
+     -:   862:#endif
+     -:   863:  register uint32_t ret;
+     -:   864:
+     1:   865:  __ASM volatile (
+     -:   866:#ifndef __ICCARM__
+     -:   867:  ".syntax unified\n\t"
+     -:   868:#endif
+     -:   869:  "1:\n\t"
+     -:   870:    "ldrex %[ret],[%[mem]]\n\t"
+     -:   871:    "cbnz  %[ret],2f\n\t"
+     -:   872:    "clrex\n\t"
+     -:   873:    "b     3f\n"
+     -:   874:  "2:\n\t"
+     -:   875:    "subs  %[val],%[ret],#1\n\t"
+     -:   876:    "strex %[res],%[val],[%[mem]]\n\t"
+     -:   877:    "cbz   %[res],3f\n\t"
+     -:   878:    "b     1b\n"
+     -:   879:  "3:"
+     -:   880:  : [ret] "=&l" (ret),
+     -:   881:    [val] "=&l" (val),
+     -:   882:    [res] "=&l" (res)
+     -:   883:  : [mem] "l"   (mem)
+     -:   884:  : "cc", "memory"
+     -:   885:  );
+     -:   886:
+     -:   887:  return ret;
+     -:   888:}
+     -:   889:
+     -:   890:/// Atomic Access Operation: Decrement (16-bit) if Not Zero
+     -:   891:/// \param[in]  mem             Memory address
+     -:   892:/// \return                     Previous value
+     -:   893:__STATIC_INLINE uint16_t atomic_dec16_nz (uint16_t *mem) {
+     -:   894:#ifdef  __ICCARM__
+     -:   895:#pragma diag_suppress=Pe550
+     -:   896:#endif
+     -:   897:  register uint32_t val, res;
+     -:   898:#ifdef  __ICCARM__
+     -:   899:#pragma diag_default=Pe550
+     -:   900:#endif
+     -:   901:  register uint16_t ret;
+     -:   902:
+ #####:   903:  __ASM volatile (
+     -:   904:#ifndef __ICCARM__
+     -:   905:  ".syntax unified\n\t"
+     -:   906:#endif
+     -:   907:  "1:\n\t"
+     -:   908:    "ldrexh %[ret],[%[mem]]\n\t"
+     -:   909:    "cbnz   %[ret],2f\n\t"
+     -:   910:    "clrex\n\t"
+     -:   911:    "b      3f\n"
+     -:   912:  "2:\n\t"
+     -:   913:    "subs   %[val],%[ret],#1\n\t"
+     -:   914:    "strexh %[res],%[val],[%[mem]]\n\t"
+     -:   915:    "cbz    %[res],3f\n\t"
+     -:   916:    "b      1b\n"
+     -:   917:  "3:"
+     -:   918:  : [ret] "=&l" (ret),
+     -:   919:    [val] "=&l" (val),
+     -:   920:    [res] "=&l" (res)
+     -:   921:  : [mem] "l"   (mem)
+     -:   922:  : "cc", "memory"
+     -:   923:  );
+     -:   924:
+     -:   925:  return ret;
+     -:   926:}
+     -:   927:
+     -:   928:/// Atomic Access Operation: Link Get
+     -:   929:/// \param[in]  root            Root address
+     -:   930:/// \return                     Link
+     -:   931:__STATIC_INLINE void *atomic_link_get (void **root) {
+     -:   932:#ifdef  __ICCARM__
+     -:   933:#pragma diag_suppress=Pe550
+     -:   934:#endif
+     -:   935:  register uint32_t val, res;
+     -:   936:#ifdef  __ICCARM__
+     -:   937:#pragma diag_default=Pe550
+     -:   938:#endif
+     -:   939:  register void    *ret;
+     -:   940:
+ #####:   941:  __ASM volatile (
+     -:   942:#ifndef __ICCARM__
+     -:   943:  ".syntax unified\n\t"
+     -:   944:#endif
+     -:   945:  "1:\n\t"
+     -:   946:    "ldrex %[ret],[%[root]]\n\t"
+     -:   947:    "cbnz  %[ret],2f\n\t"
+     -:   948:    "clrex\n\t"
+     -:   949:    "b     3f\n"
+     -:   950:  "2:\n\t"
+     -:   951:    "ldr   %[val],[%[ret]]\n\t"
+     -:   952:    "strex %[res],%[val],[%[root]]\n\t"
+     -:   953:    "cbz   %[res],3f\n\t"
+     -:   954:    "b     1b\n"
+     -:   955:  "3:"
+     -:   956:  : [ret]  "=&l" (ret),
+     -:   957:    [val]  "=&l" (val),
+     -:   958:    [res]  "=&l" (res)
+     -:   959:  : [root] "l"   (root)
+     -:   960:  : "cc", "memory"
+     -:   961:  );
+     -:   962:
+     -:   963:  return ret;
+     -:   964:}
+     -:   965:
+     -:   966:/// Atomic Access Operation: Link Put
+     -:   967:/// \param[in]  root            Root address
+     -:   968:/// \param[in]  lnk             Link
+     -:   969:__STATIC_INLINE void atomic_link_put (void **root, void *link) {
+     -:   970:#ifdef  __ICCARM__
+     -:   971:#pragma diag_suppress=Pe550
+     -:   972:#endif
+     -:   973:  register uint32_t val1, val2, res;
+     -:   974:#ifdef  __ICCARM__
+     -:   975:#pragma diag_default=Pe550
+     -:   976:#endif
+     -:   977:
+ #####:   978:  __ASM volatile (
+     -:   979:#ifndef __ICCARM__
+     -:   980:  ".syntax unified\n\t"
+     -:   981:#endif
+     -:   982:  "1:\n\t"
+     -:   983:    "ldr   %[val1],[%[root]]\n\t"
+     -:   984:    "str   %[val1],[%[link]]\n\t"
+     -:   985:    "dmb\n\t"
+     -:   986:    "ldrex %[val1],[%[root]]\n\t"
+     -:   987:    "ldr   %[val2],[%[link]]\n\t"
+     -:   988:    "cmp   %[val2],%[val1]\n\t"
+     -:   989:    "bne   1b\n\t"
+     -:   990:    "strex %[res],%[link],[%[root]]\n\t"
+     -:   991:    "cbz   %[res],2f\n\t"
+     -:   992:    "b     1b\n"
+     -:   993:  "2:"
+     -:   994:  : [val1] "=&l" (val1),
+     -:   995:    [val2] "=&l" (val2),
+     -:   996:    [res]  "=&l" (res)
+     -:   997:  : [root] "l"   (root),
+     -:   998:    [link] "l"   (link)
+     -:   999:  : "cc", "memory"
+     -:  1000:  );
+     -:  1001:}
+     -:  1002:
+     -:  1003://lint --flb "Library End" [MISRA Note 12]
+     -:  1004:
+     -:  1005:#endif  // (EXCLUSIVE_ACCESS == 1)
+     -:  1006:
+     -:  1007:
+     -:  1008:#endif  // RTX_CORE_CM_H_

@@ -1,0 +1,1390 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/ARMCLANG/include/math.h
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * math.h: ANSI 'C' (X3J11 Oct 88) library header, section 4.5
+     -:     3: * Copyright (C) Codemist Ltd., 1988
+     -:     4: * Copyright 1991-1998,2004-2006,2014 ARM Limited. All rights reserved
+     -:     5: */
+     -:     6:
+     -:     7:/*
+     -:     8: * RCS $Revision$ Codemist 0.03
+     -:     9: * Checkin $Date$
+     -:    10: * Revising $Author: statham $
+     -:    11: */
+     -:    12:
+     -:    13:/*
+     -:    14: * Parts of this file are based upon fdlibm:
+     -:    15: *
+     -:    16: * ====================================================
+     -:    17: * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+     -:    18: *
+     -:    19: * Developed at SunSoft, a Sun Microsystems, Inc. business.
+     -:    20: * Permission to use, copy, modify, and distribute this
+     -:    21: * software is freely granted, provided that this notice
+     -:    22: * is preserved.
+     -:    23: * ====================================================
+     -:    24: */
+     -:    25:
+     -:    26:#ifndef __math_h
+     -:    27:#define __math_h
+     -:    28:#define __ARMCLIB_VERSION 6240002
+     -:    29:
+     -:    30:#if defined(__clang__)
+     -:    31:#  if defined(__ARM_64BIT_STATE)
+     -:    32:#  define __TARGET_ARCH_AARCH64
+     -:    33:#  endif
+     -:    34:
+     -:    35:#  if !defined(__ARM_FP)
+     -:    36:#  define __TARGET_FPU_SOFTVFP
+     -:    37:#  endif
+     -:    38:
+     -:    39:#  if (__ARM_FP & 0x4)
+     -:    40:#  define __TARGET_FPU_VFP_SINGLE
+     -:    41:#  endif
+     -:    42:
+     -:    43:#  if (__ARM_FP & 0x8)
+     -:    44:#  define __TARGET_FPU_VFP_DOUBLE
+     -:    45:#  endif
+     -:    46:#endif
+     -:    47:
+     -:    48:#if defined(__clang__) || (defined(__ARMCC_VERSION) && !defined(__STRICT_ANSI__))
+     -:    49:  /* armclang and non-strict armcc allow 'long long' in system headers */
+     -:    50:  #define __LONGLONG long long
+     -:    51:#else
+     -:    52:  /* strict armcc has '__int64' */
+     -:    53:  #define __LONGLONG __int64
+     -:    54:#endif
+     -:    55:
+     -:    56:/*
+     -:    57: * Some of these declarations are new in C99.  To access them regardless of
+     -:    58: * selected standard you can use -D__USE_C99_MATH (or -D__USE_C99_ALL).
+     -:    59: */
+     -:    60:#ifndef __USE_C99_MATH
+     -:    61:  #if defined(__USE_C99_ALL) || (defined(__STDC_VERSION__) && 199901L <= __STDC_VERSION__) || defined(__cplusplus)
+     -:    62:    #define __USE_C99_MATH 1
+     -:    63:  #endif
+     -:    64:#endif
+     -:    65:
+     -:    66:#if defined(_ARM_OVERRIDE_PCS)
+     -:    67:#define _ARMABI __attribute__((__nothrow__)) _ARM_OVERRIDE_PCS
+     -:    68:#else
+     -:    69:#define _ARMABI __attribute__((__nothrow__))
+     -:    70:#endif
+     -:    71:#if (defined(__ARM_64BIT_STATE) || defined(__TARGET_ARCH_AARCH64))
+     -:    72:# define _ARMABI_SOFTFP __attribute__((__nothrow__))
+     -:    73:#else
+     -:    74:# define _ARMABI_SOFTFP __attribute__((__nothrow__)) __attribute__((__pcs__("aapcs")))
+     -:    75:#endif
+     -:    76:#if !defined(__TARGET_ARCH_AARCH64)
+     -:    77:# define __HAVE_LONGDOUBLE 1
+     -:    78:#endif
+     -:    79:#if defined(_ARM_OVERRIDE_PCS)
+     -:    80:#define _ARMABI_PURE __attribute__((__nothrow__)) __attribute__((__const__)) _ARM_OVERRIDE_PCS
+     -:    81:#else
+     -:    82:#define _ARMABI_PURE __attribute__((__nothrow__)) __attribute__((__const__))
+     -:    83:#endif
+     -:    84:#ifdef __FP_FENV_EXCEPTIONS
+     -:    85:# define _ARMABI_FPEXCEPT _ARMABI
+     -:    86:#else
+     -:    87:# define _ARMABI_FPEXCEPT _ARMABI __attribute__((__const__))
+     -:    88:#endif
+     -:    89:
+     -:    90:#ifdef __cplusplus
+     -:    91:#define _ARMABI_INLINE inline
+     -:    92:#define _ARMABI_INLINE_DEF inline
+     -:    93:#elif !defined(__ARMCOMPILER_VERSION) && defined __GNUC__ || defined _USE_STATIC_INLINE
+     -:    94:#define _ARMABI_INLINE static __inline
+     -:    95:#define _ARMABI_INLINE_DEF static __inline
+     -:    96:#elif (defined(__STDC_VERSION__) && 199901L <= __STDC_VERSION__)
+     -:    97:#define _ARMABI_INLINE inline
+     -:    98:#define _ARMABI_INLINE_DEF static inline
+     -:    99:#else
+     -:   100:#define _ARMABI_INLINE __inline
+     -:   101:#define _ARMABI_INLINE_DEF __inline
+     -:   102:#endif
+     -:   103:
+     -:   104:#if (defined(__ARM_64BIT_STATE) || defined(__TARGET_ARCH_AARCH64))
+     -:   105:#  define _SOFTFP
+     -:   106:#else
+     -:   107:#  define _SOFTFP __attribute__((__pcs__("aapcs")))
+     -:   108:#endif
+     -:   109:
+     -:   110:   /*
+     -:   111:    * If the compiler supports signalling nans as per N965 then it
+     -:   112:    * will define __SUPPORT_SNAN__, in which case a user may define
+     -:   113:    * _WANT_SNAN in order to obtain the nans function, as well as the
+     -:   114:    * FP_NANS and FP_NANQ classification macros.
+     -:   115:    */
+     -:   116:#if defined(__SUPPORT_SNAN__) && defined(_WANT_SNAN)
+     -:   117:#pragma import(__use_snan)
+     -:   118:#endif
+     -:   119:
+     -:   120:/*
+     -:   121: * Macros for our inline functions down below.
+     -:   122: * unsigned& __FLT(float x) - returns the bit pattern of x
+     -:   123: * unsigned& __HI(double x) - returns the bit pattern of the high part of x
+     -:   124: *                            (high part has exponent & sign bit in it)
+     -:   125: * unsigned& __LO(double x) - returns the bit pattern of the low part of x
+     -:   126: *
+     -:   127: * We can assign to __FLT, __HI, and __LO and the appropriate bits get set in
+     -:   128: * the floating point variable used.
+     -:   129: *
+     -:   130: * __HI & __LO are affected by the endianness and the target FPU.
+     -:   131: */
+     -:   132:#define __FLT(x) (*(unsigned *)&(x))
+     -:   133:#if defined(__ARM_BIG_ENDIAN) || defined(__BIG_ENDIAN)
+     -:   134:#  define __LO(x) (*(1 + (unsigned *)&(x)))
+     -:   135:#  define __HI(x) (*(unsigned *)&(x))
+     -:   136:#else /* !defined(__ARM_BIG_ENDIAN) && !defined(__BIG_ENDIAN) */
+     -:   137:#  define __HI(x) (*(1 + (unsigned *)&(x)))
+     -:   138:#  define __LO(x) (*(unsigned *)&(x))
+     -:   139:#endif /* !defined(__ARM_BIG_ENDIAN) && !defined(__BIG_ENDIAN) */
+     -:   140:
+     -:   141:#   ifndef __MATH_DECLS
+     -:   142:#   define __MATH_DECLS
+     -:   143:
+     -:   144:
+     -:   145:/*
+     -:   146: * A set of functions that we don't actually want to put in the standard
+     -:   147: * namespace ever.  These are all called by the C99 macros.  As they're
+     -:   148: * not specified by any standard they can't belong in ::std::.  The
+     -:   149: * macro #defines are below amongst the standard function declarations.
+     -:   150: * We only include these if we actually need them later on
+     -:   151: */
+     -:   152:#if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:   153:#   ifdef __cplusplus
+     -:   154:      extern "C" {
+     -:   155:#   endif /* __cplusplus */
+     -:   156:
+     -:   157:extern _SOFTFP unsigned __ARM_dcmp4(double /*x*/, double /*y*/);
+     -:   158:extern _SOFTFP unsigned __ARM_fcmp4(float /*x*/, float /*y*/);
+     -:   159:    /*
+     -:   160:     * Compare x and y and return the CPSR in r0.  These means we can test for
+     -:   161:     * result types with bit pattern matching.
+     -:   162:     *
+     -:   163:     * These are a copy of the declarations in rt_fp.h keep in sync.
+     -:   164:     */
+     -:   165:
+     -:   166:extern _ARMABI_SOFTFP int __ARM_fpclassifyf(float /*x*/);
+     -:   167:extern _ARMABI_SOFTFP int __ARM_fpclassify(double /*x*/);
+     -:   168:    /* Classify x into NaN, infinite, normal, subnormal, zero */
+     -:   169:    /* Used by fpclassify macro */
+     -:   170:
+     -:   171:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isfinitef(float __x)
+     -:   172:{
+     -:   173:    return ((__FLT(__x) >> 23) & 0xff) != 0xff;
+     -:   174:}
+     -:   175:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isfinite(double __x)
+     -:   176:{
+     -:   177:    return ((__HI(__x) >> 20) & 0x7ff) != 0x7ff;
+     -:   178:}
+     -:   179:    /* Return 1 if __x is finite, 0 otherwise */
+     -:   180:    /* Used by isfinite macro */
+     -:   181:
+     -:   182:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isinff(float __x)
+     -:   183:{
+     -:   184:    return (__FLT(__x) << 1) == 0xff000000;
+     -:   185:}
+     -:   186:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isinf(double __x)
+     -:   187:{
+     -:   188:    return ((__HI(__x) << 1) == 0xffe00000) && (__LO(__x) == 0);
+     -:   189:}
+     -:   190:    /* Return 1 if __x is infinite, 0 otherwise */
+     -:   191:    /* Used by isinf macro */
+     -:   192:
+     -:   193:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_islessgreaterf(float __x, float __y)
+     -:   194:{
+     -:   195:    unsigned __f = __ARM_fcmp4(__x, __y) >> 28;
+     -:   196:    return (__f == 8) || (__f == 2); /* Just N set or Just Z set */
+     -:   197:}
+     -:   198:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_islessgreater(double __x, double __y)
+     -:   199:{
+     -:   200:    unsigned __f = __ARM_dcmp4(__x, __y) >> 28;
+     -:   201:    return (__f == 8) || (__f == 2); /* Just N set or Just Z set */
+     -:   202:}
+     -:   203:    /*
+     -:   204:     * Compare __x and __y and return 1 if __x < __y or __x > __y, 0 otherwise
+     -:   205:     * Used by islessgreater macro
+     -:   206:     */
+     -:   207:
+     -:   208:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isnanf(float __x)
+     -:   209:{
+ #####:   210:    return (0x7f800000 - (__FLT(__x) & 0x7fffffff)) >> 31;
+     -:   211:}
+     -:   212:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isnan(double __x)
+     -:   213:{
+     -:   214:    unsigned __xf = __HI(__x) | ((__LO(__x) == 0) ? 0 : 1);
+     -:   215:    return (0x7ff00000 - (__xf & 0x7fffffff)) >> 31;
+     -:   216:}
+     -:   217:    /* Return 1 if __x is a NaN, 0 otherwise */
+     -:   218:    /* Used by isnan macro */
+     -:   219:
+     -:   220:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isnormalf(float __x)
+     -:   221:{
+     -:   222:    unsigned __xe = (__FLT(__x) >> 23) & 0xff;
+     -:   223:    return (__xe != 0xff) && (__xe != 0);
+     -:   224:}
+     -:   225:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_isnormal(double __x)
+     -:   226:{
+     -:   227:    unsigned __xe = (__HI(__x) >> 20) & 0x7ff;
+     -:   228:    return (__xe != 0x7ff) && (__xe != 0);
+     -:   229:}
+     -:   230:    /* Return 1 if __x is a normalised number, 0 otherwise */
+     -:   231:    /* used by isnormal macro */
+     -:   232:
+     -:   233:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_signbitf(float __x)
+     -:   234:{
+     -:   235:    return __FLT(__x) >> 31;
+     -:   236:}
+     -:   237:_ARMABI_INLINE_DEF _ARMABI_SOFTFP int __ARM_signbit(double __x)
+     -:   238:{
+     -:   239:    return __HI(__x) >> 31;
+     -:   240:}
+     -:   241:    /* Return signbit of __x */
+     -:   242:    /* Used by signbit macro */
+     -:   243:
+     -:   244:#   ifdef __cplusplus
+     -:   245:      } /* extern "C" */
+     -:   246:#   endif /* __cplusplus */
+     -:   247:#endif /* Strict ANSI */
+     -:   248:
+     -:   249:#   undef __CLIBNS
+     -:   250:
+     -:   251:#   ifdef __cplusplus
+     -:   252:      namespace std {
+     -:   253:#       define __CLIBNS ::std::
+     -:   254:        extern "C" {
+     -:   255:#   else
+     -:   256:#       define __CLIBNS
+     -:   257:#   endif  /* __cplusplus */
+     -:   258:
+     -:   259:
+     -:   260:#ifndef __has_builtin
+     -:   261:  #define __has_builtin(x) 0
+     -:   262:#endif
+     -:   263:
+     -:   264:#if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:   265:  /* C99 additions */
+     -:   266:  typedef float float_t;
+     -:   267:  typedef double double_t;
+     -:   268:#if __has_builtin(__builtin_inf)
+     -:   269:#   define HUGE_VALF __builtin_inff()
+     -:   270:#   define HUGE_VALL __builtin_infl()
+     -:   271:#   define INFINITY __builtin_inff()
+     -:   272:#   define NAN __builtin_nanf("")
+     -:   273:# else
+     -:   274:#   define HUGE_VALF ((float)__INFINITY__)
+     -:   275:#   define HUGE_VALL ((long double)__INFINITY__)
+     -:   276:#   define INFINITY ((float)__INFINITY__)
+     -:   277:#   define NAN (__ESCAPE__(0f_7FC00000))
+     -:   278:#endif
+     -:   279:
+     -:   280:#   define MATH_ERRNO 1
+     -:   281:#   define MATH_ERREXCEPT 2
+     -:   282:extern const int math_errhandling;
+     -:   283:#endif
+     -:   284:#if __has_builtin(__builtin_inf)
+     -:   285:# define HUGE_VAL __builtin_inf()
+     -:   286:#else
+     -:   287:# define HUGE_VAL ((double)__INFINITY__)
+     -:   288:#endif
+     -:   289:
+     -:   290:extern _ARMABI double acos(double /*x*/);
+     -:   291:   /* computes the principal value of the arc cosine of x */
+     -:   292:   /* a domain error occurs for arguments not in the range -1 to 1 */
+     -:   293:   /* Returns: the arc cosine in the range 0 to Pi. */
+     -:   294:extern _ARMABI double asin(double /*x*/);
+     -:   295:   /* computes the principal value of the arc sine of x */
+     -:   296:   /* a domain error occurs for arguments not in the range -1 to 1 */
+     -:   297:   /* and -HUGE_VAL is returned. */
+     -:   298:   /* Returns: the arc sine in the range -Pi/2 to Pi/2. */
+     -:   299:
+     -:   300:extern _ARMABI_PURE double atan(double /*x*/);
+     -:   301:   /* computes the principal value of the arc tangent of x */
+     -:   302:   /* Returns: the arc tangent in the range -Pi/2 to Pi/2. */
+     -:   303:
+     -:   304:extern _ARMABI double atan2(double /*y*/, double /*x*/);
+     -:   305:   /* computes the principal value of the arc tangent of y/x, using the */
+     -:   306:   /* signs of both arguments to determine the quadrant of the return value */
+     -:   307:   /* a domain error occurs if both args are zero, and -HUGE_VAL returned. */
+     -:   308:   /* Returns: the arc tangent of y/x, in the range -Pi to Pi. */
+     -:   309:
+     -:   310:extern _ARMABI double cos(double /*x*/);
+     -:   311:   /* computes the cosine of x (measured in radians). A large magnitude */
+     -:   312:   /* argument may yield a result with little or no significance. */
+     -:   313:   /* a domain error occurs for infinite input (C 7.12.1 footnote 196). */
+     -:   314:   /* Returns: the cosine value. */
+     -:   315:extern _ARMABI double sin(double /*x*/);
+     -:   316:   /* computes the sine of x (measured in radians). A large magnitude */
+     -:   317:   /* argument may yield a result with little or no significance. */
+     -:   318:   /* a domain error occurs for infinite input (C 7.12.1 footnote 196). */
+     -:   319:   /* Returns: the sine value. */
+     -:   320:
+     -:   321:extern void __use_accurate_range_reduction(void);
+     -:   322:   /* reference this to select the larger, slower, but more accurate */
+     -:   323:   /* range reduction in sin, cos and tan */
+     -:   324:
+     -:   325:extern _ARMABI double tan(double /*x*/);
+     -:   326:   /* computes the tangent of x (measured in radians). A large magnitude */
+     -:   327:   /* argument may yield a result with little or no significance */
+     -:   328:   /* Returns: the tangent value. */
+     -:   329:   /*          if range error; returns HUGE_VAL. */
+     -:   330:
+     -:   331:extern _ARMABI double cosh(double /*x*/);
+     -:   332:   /* computes the hyperbolic cosine of x. A range error occurs if the */
+     -:   333:   /* magnitude of x is too large. */
+     -:   334:   /* Returns: the hyperbolic cosine value. */
+     -:   335:   /*          if range error; returns HUGE_VAL. */
+     -:   336:extern _ARMABI double sinh(double /*x*/);
+     -:   337:   /* computes the hyperbolic sine of x. A range error occurs if the */
+     -:   338:   /* magnitude of x is too large. */
+     -:   339:   /* Returns: the hyperbolic sine value. */
+     -:   340:   /*          if range error; returns -HUGE_VAL or HUGE_VAL depending */
+     -:   341:   /*          on the sign of the argument */
+     -:   342:
+     -:   343:extern _ARMABI_PURE double tanh(double /*x*/);
+     -:   344:   /* computes the hyperbolic tangent of x. */
+     -:   345:   /* Returns: the hyperbolic tangent value. */
+     -:   346:
+     -:   347:extern _ARMABI double exp(double /*x*/);
+     -:   348:   /* computes the exponential function of x. A range error occurs if the */
+     -:   349:   /* magnitude of x is too large. */
+     -:   350:   /* Returns: the exponential value. */
+     -:   351:   /*          if underflow range error; 0 is returned. */
+     -:   352:   /*          if overflow range error; HUGE_VAL is returned. */
+     -:   353:
+     -:   354:extern _ARMABI double frexp(double /*value*/, int * /*exp*/) __attribute__((__nonnull__(2)));
+     -:   355:   /* breaks a floating-point number into a normalised fraction and an */
+     -:   356:   /* integral power of 2. It stores the integer in the int object pointed */
+     -:   357:   /* to by exp. */
+     -:   358:   /* Returns: the value x, such that x is a double with magnitude in the */
+     -:   359:   /* interval 0.5 to 1.0 or zero, and value equals x times 2 raised to the */
+     -:   360:   /* power *exp. If value is zero, both parts of the result are zero. */
+     -:   361:
+     -:   362:extern _ARMABI double ldexp(double /*x*/, int /*exp*/);
+     -:   363:   /* multiplies a floating-point number by an integral power of 2. */
+     -:   364:   /* A range error may occur. */
+     -:   365:   /* Returns: the value of x times 2 raised to the power of exp. */
+     -:   366:   /*          if range error; HUGE_VAL is returned. */
+     -:   367:extern _ARMABI double log(double /*x*/);
+     -:   368:   /* computes the natural logarithm of x. A domain error occurs if the */
+     -:   369:   /* argument is negative, and -HUGE_VAL is returned. A range error occurs */
+     -:   370:   /* if the argument is zero. */
+     -:   371:   /* Returns: the natural logarithm. */
+     -:   372:   /*          if range error; -HUGE_VAL is returned. */
+     -:   373:extern _ARMABI double log10(double /*x*/);
+     -:   374:   /* computes the base-ten logarithm of x. A domain error occurs if the */
+     -:   375:   /* argument is negative. A range error occurs if the argument is zero. */
+     -:   376:   /* Returns: the base-ten logarithm. */
+     -:   377:extern _ARMABI double modf(double /*value*/, double * /*iptr*/) __attribute__((__nonnull__(2)));
+     -:   378:   /* breaks the argument value into integral and fraction parts, each of */
+     -:   379:   /* which has the same sign as the argument. It stores the integral part */
+     -:   380:   /* as a double in the object pointed to by iptr. */
+     -:   381:   /* Returns: the signed fractional part of value. */
+     -:   382:
+     -:   383:extern _ARMABI double pow(double /*x*/, double /*y*/);
+     -:   384:   /* computes x raised to the power of y. A domain error occurs if x is */
+     -:   385:   /* zero and y is less than or equal to zero, or if x is negative and y */
+     -:   386:   /* is not an integer, and -HUGE_VAL returned. A range error may occur. */
+     -:   387:   /* Returns: the value of x raised to the power of y. */
+     -:   388:   /*          if underflow range error; 0 is returned. */
+     -:   389:   /*          if overflow range error; HUGE_VAL is returned. */
+     -:   390:extern _ARMABI double sqrt(double /*x*/);
+     -:   391:   /* computes the non-negative square root of x. A domain error occurs */
+     -:   392:   /* if the argument is negative, and -HUGE_VAL returned. */
+     -:   393:   /* Returns: the value of the square root. */
+     -:   394:
+     -:   395:#if defined(__TARGET_FPU_VFP_DOUBLE) && !defined(__TARGET_FPU_SOFTVFP)
+     -:   396:    #if defined(__clang__) && __ARM_ARCH >= 6
+     -:   397:    __attribute__((__always_inline__)) static double __sqrt(double d) {
+     -:   398:      __asm__ __volatile__(
+     -:   399:    #if defined(__ARM_64BIT_STATE)
+     -:   400:      "fsqrt %x0, %x0"
+     -:   401:    #else
+     -:   402:      "vsqrt.f64 %0, %0"
+     -:   403:    #endif
+     -:   404:      : "+w"(d));
+     -:   405:      return d;
+     -:   406:    }
+     -:   407:    #endif
+     -:   408:    _ARMABI_INLINE double _sqrt(double __x) { return __sqrt(__x); }
+     -:   409:#else
+     -:   410:    _ARMABI_INLINE double _sqrt(double __x) { return sqrt(__x); }
+     -:   411:#endif
+     -:   412:#if defined(__TARGET_FPU_VFP_SINGLE) && !defined(__TARGET_FPU_SOFTVFP)
+     -:   413:    #if defined(__clang__) && __ARM_ARCH >= 6
+     -:   414:    __attribute__((__always_inline__)) static float __sqrtf(float f) {
+     -:   415:      __asm__ __volatile__(
+     -:   416:    #if defined(__ARM_64BIT_STATE)
+     -:   417:      "fsqrt  %w0, %w0"
+     -:   418:    #else
+     -:   419:      "vsqrt.f32 %0, %0"
+     -:   420:    #endif
+     -:   421:      : "+w"(f));
+     -:   422:      return f;
+     -:   423:    }
+     -:   424:    #endif
+     -:   425:    _ARMABI_INLINE float _sqrtf(float __x) { return __sqrtf(__x); }
+     -:   426:#else
+     -:   427:    _ARMABI_INLINE float _sqrtf(float __x) { return (float)sqrt(__x); }
+     -:   428:#endif
+     -:   429:    /* With VFP, _sqrt and _sqrtf should expand inline as the native VFP square root
+     -:   430:     * instructions. They will not behave like the C sqrt() function, because
+     -:   431:     * they will report unusual values as IEEE exceptions (in fpmodes which
+     -:   432:     * support IEEE exceptions) rather than in errno. These function names
+     -:   433:     * are not specified in any standard. */
+     -:   434:
+     -:   435:extern _ARMABI_PURE double ceil(double /*x*/);
+     -:   436:   /* computes the smallest integer not less than x. */
+     -:   437:   /* Returns: the smallest integer not less than x, expressed as a double. */
+     -:   438:extern _ARMABI_PURE double fabs(double /*x*/);
+     -:   439:   /* computes the absolute value of the floating-point number x. */
+     -:   440:   /* Returns: the absolute value of x. */
+     -:   441:
+     -:   442:extern _ARMABI_PURE double floor(double /*d*/);
+     -:   443:   /* computes the largest integer not greater than x. */
+     -:   444:   /* Returns: the largest integer not greater than x, expressed as a double */
+     -:   445:
+     -:   446:extern _ARMABI double fmod(double /*x*/, double /*y*/);
+     -:   447:   /* computes the floating-point remainder of x/y. */
+     -:   448:   /* Returns: the value x - i * y, for some integer i such that, if y is */
+     -:   449:   /*          nonzero, the result has the same sign as x and magnitude */
+     -:   450:   /*          less than the magnitude of y. If y is zero, a domain error */
+     -:   451:   /*          occurs and -HUGE_VAL is returned. */
+     -:   452:
+     -:   453:    /* Additional Mathlib functions not defined by the ANSI standard.
+     -:   454:     * Not guaranteed, and not necessarily very well tested.
+     -:   455:     * C99 requires the user to include <math.h> to use these functions
+     -:   456:     * declaring them "by hand" is not sufficient
+     -:   457:     *
+     -:   458:     * The above statement is not completely true now.  Some of the above
+     -:   459:     * C99 functionality has been added as per the Standard, and (where
+     -:   460:     * necessary) old Mathlib functionality withdrawn/changed.  Before
+     -:   461:     * including this header #define __ENABLE_MATHLIB_LEGACY if you want to
+     -:   462:     * re-enable the legacy functionality.
+     -:   463:     */
+     -:   464:
+     -:   465:#if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:   466:
+     -:   467:extern _ARMABI double acosh(double /*x*/);
+     -:   468:    /*
+     -:   469:     * Inverse cosh. EDOM if argument < 1.0
+     -:   470:     */
+     -:   471:extern _ARMABI double asinh(double /*x*/);
+     -:   472:    /*
+     -:   473:     * Inverse sinh.
+     -:   474:     */
+     -:   475:extern _ARMABI double atanh(double /*x*/);
+     -:   476:    /*
+     -:   477:     * Inverse tanh. EDOM if |argument| > 1.0
+     -:   478:     */
+     -:   479:extern _ARMABI double cbrt(double /*x*/);
+     -:   480:    /*
+     -:   481:     * Cube root.
+     -:   482:     */
+     -:   483:_ARMABI_INLINE _ARMABI_PURE double copysign(double __x, double __y)
+     -:   484:    /*
+     -:   485:     * Returns x with sign bit replaced by sign of y.
+     -:   486:     */
+     -:   487:{
+     -:   488:    __HI(__x) = (__HI(__x) & 0x7fffffff) | (__HI(__y) & 0x80000000);
+     -:   489:    return __x;
+     -:   490:}
+     -:   491:_ARMABI_INLINE _ARMABI_PURE float copysignf(float __x, float __y)
+     -:   492:    /*
+     -:   493:     * Returns x with sign bit replaced by sign of y.
+     -:   494:     */
+     -:   495:{
+     -:   496:    __FLT(__x) = (__FLT(__x) & 0x7fffffff) | (__FLT(__y) & 0x80000000);
+     -:   497:    return __x;
+     -:   498:}
+     -:   499:extern _ARMABI double erf(double /*x*/);
+     -:   500:    /*
+     -:   501:     * Error function. (2/sqrt(pi)) * integral from 0 to x of exp(-t*t) dt.
+     -:   502:     */
+     -:   503:extern _ARMABI double erfc(double /*x*/);
+     -:   504:    /*
+     -:   505:     * 1-erf(x). (More accurate than just coding 1-erf(x), for large x.)
+     -:   506:     */
+     -:   507:extern _ARMABI double expm1(double /*x*/);
+     -:   508:    /*
+     -:   509:     * exp(x)-1. (More accurate than just coding exp(x)-1, for small x.)
+     -:   510:     */
+     -:   511:#define fpclassify(x) \
+     -:   512:    ((sizeof(x) == sizeof(float)) ? \
+     -:   513:        __ARM_fpclassifyf(x) : __ARM_fpclassify(x))
+     -:   514:    /*
+     -:   515:     * Classify a floating point number into one of the following values:
+     -:   516:     */
+     -:   517:#define FP_ZERO         (0)
+     -:   518:#define FP_SUBNORMAL    (4)
+     -:   519:#define FP_NORMAL       (5)
+     -:   520:#define FP_INFINITE     (3)
+     -:   521:#define FP_NAN          (7)
+     -:   522:
+     -:   523:#if defined(_WANT_SNAN) && defined(__SUPPORT_SNAN__)
+     -:   524:/*
+     -:   525: * Note that we'll never classify a number as FP_NAN, as all NaNs will
+     -:   526: * be either FP_NANQ or FP_NANS
+     -:   527: */
+     -:   528:#  define FP_NANQ       (8)
+     -:   529:#  define FP_NANS       (9)
+     -:   530:#endif
+     -:   531:
+     -:   532:
+     -:   533:extern _ARMABI double hypot(double /*x*/, double /*y*/);
+     -:   534:    /*
+     -:   535:     * sqrt(x*x+y*y), ie the length of the vector (x,y) or the
+     -:   536:     * hypotenuse of a right triangle whose other two sides are x
+     -:   537:     * and y. Won't overflow unless the _answer_ is too big, even
+     -:   538:     * if the intermediate x*x+y*y is too big.
+     -:   539:     */
+     -:   540:extern _ARMABI int ilogb(double /*x*/);
+     -:   541:    /*
+     -:   542:     * Exponent of x (returns 0 for 1.0, 1 for 2.0, -1 for 0.5, etc.)
+     -:   543:     */
+     -:   544:extern _ARMABI int ilogbf(float /*x*/);
+     -:   545:    /*
+     -:   546:     * Like ilogb but takes a float
+     -:   547:     */
+     -:   548:extern _ARMABI int ilogbl(long double /*x*/);
+     -:   549:    /*
+     -:   550:     * Exponent of x (returns 0 for 1.0, 1 for 2.0, -1 for 0.5, etc.)
+     -:   551:     */
+     -:   552:#define FP_ILOGB0   (-0x7fffffff) /* ilogb(0) == -INT_MAX */
+     -:   553:#define FP_ILOGBNAN ( 0x80000000) /* ilogb(NAN) == INT_MIN */
+     -:   554:
+     -:   555:#define isfinite(x) \
+     -:   556:    ((sizeof(x) == sizeof(float)) \
+     -:   557:        ? __ARM_isfinitef(x) \
+     -:   558:        : __ARM_isfinite(x))
+     -:   559:    /*
+     -:   560:     * Returns true if x is a finite number, size independent.
+     -:   561:     */
+     -:   562:
+     -:   563:#define isgreater(x, y) \
+     -:   564:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   565:        ? ((__ARM_fcmp4((x), (y)) & 0xf0000000) == 0x20000000) \
+     -:   566:        : ((__ARM_dcmp4((x), (y)) & 0xf0000000) == 0x20000000))
+     -:   567:    /*
+     -:   568:     * Returns true if x > y, throws no exceptions except on Signaling NaNs
+     -:   569:     *
+     -:   570:     * We want the C not set but the Z bit clear, V must be clear
+     -:   571:     */
+     -:   572:
+     -:   573:#define isgreaterequal(x, y) \
+     -:   574:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   575:        ? ((__ARM_fcmp4((x), (y)) & 0x30000000) == 0x20000000) \
+     -:   576:        : ((__ARM_dcmp4((x), (y)) & 0x30000000) == 0x20000000))
+     -:   577:    /*
+     -:   578:     * Returns true if x >= y, throws no exceptions except on Signaling NaNs
+     -:   579:     *
+     -:   580:     * We just need to see if the C bit is set or not and ensure V clear
+     -:   581:     */
+     -:   582:
+     -:   583:#define isinf(x) \
+     -:   584:    ((sizeof(x) == sizeof(float)) \
+     -:   585:        ? __ARM_isinff(x) \
+     -:   586:        : __ARM_isinf(x))
+     -:   587:    /*
+     -:   588:     * Returns true if x is an infinity, size independent.
+     -:   589:     */
+     -:   590:
+     -:   591:#define isless(x, y)  \
+     -:   592:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   593:        ? ((__ARM_fcmp4((x), (y)) & 0xf0000000) == 0x80000000) \
+     -:   594:        : ((__ARM_dcmp4((x), (y)) & 0xf0000000) == 0x80000000))
+     -:   595:    /*
+     -:   596:     * Returns true if x < y, throws no exceptions except on Signaling NaNs
+     -:   597:     *
+     -:   598:     * We're less than if N is set, V clear
+     -:   599:     */
+     -:   600:
+     -:   601:#define islessequal(x, y) \
+     -:   602:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   603:        ? ((__ARM_fcmp4((x), (y)) & 0xc0000000) != 0) \
+     -:   604:        : ((__ARM_dcmp4((x), (y)) & 0xc0000000) != 0))
+     -:   605:    /*
+     -:   606:     * Returns true if x <= y, throws no exceptions except on Signaling NaNs
+     -:   607:     *
+     -:   608:     * We're less than or equal if one of N or Z is set, V clear
+     -:   609:     */
+     -:   610:
+     -:   611:#define islessgreater(x, y) \
+     -:   612:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   613:        ? __ARM_islessgreaterf((x), (y)) \
+     -:   614:        : __ARM_islessgreater((x), (y)))
+     -:   615:    /*
+     -:   616:     * Returns true if x <> y, throws no exceptions except on Signaling NaNs
+     -:   617:     * Unfortunately this test is too complicated to do in a macro without
+     -:   618:     * evaluating x & y twice.  Shame really...
+     -:   619:     */
+     -:   620:
+     -:   621:#define isnan(x) \
+     -:   622:    ((sizeof(x) == sizeof(float)) \
+     -:   623:        ? __ARM_isnanf(x) \
+     -:   624:        : __ARM_isnan(x))
+     -:   625:    /*
+     -:   626:     * Returns TRUE if x is a NaN.
+     -:   627:     */
+     -:   628:
+     -:   629:#define isnormal(x) \
+     -:   630:    ((sizeof(x) == sizeof(float)) \
+     -:   631:        ? __ARM_isnormalf(x) \
+     -:   632:        : __ARM_isnormal(x))
+     -:   633:    /*
+     -:   634:     * Returns TRUE if x is a NaN.
+     -:   635:     */
+     -:   636:
+     -:   637:#define isunordered(x, y) \
+     -:   638:    (((sizeof(x) == sizeof(float)) && (sizeof(y) == sizeof(float))) \
+     -:   639:        ? ((__ARM_fcmp4((x), (y)) & 0x10000000) == 0x10000000) \
+     -:   640:        : ((__ARM_dcmp4((x), (y)) & 0x10000000) == 0x10000000))
+     -:   641:    /*
+     -:   642:     * Returns true if x ? y, throws no exceptions except on Signaling NaNs
+     -:   643:     * Unordered occurs if and only if the V bit is set
+     -:   644:     */
+     -:   645:
+     -:   646:extern _ARMABI double lgamma (double /*x*/);
+     -:   647:    /*
+     -:   648:     * The log of the absolute value of the gamma function of x. The sign
+     -:   649:     * of the gamma function of x is returned in the global `signgam'.
+     -:   650:     */
+     -:   651:extern _ARMABI double log1p(double /*x*/);
+     -:   652:    /*
+     -:   653:     * log(1+x). (More accurate than just coding log(1+x), for small x.)
+     -:   654:     */
+     -:   655:extern _ARMABI double logb(double /*x*/);
+     -:   656:    /*
+     -:   657:     * Like ilogb but returns a double.
+     -:   658:     */
+     -:   659:extern _ARMABI float logbf(float /*x*/);
+     -:   660:    /*
+     -:   661:     * Like logb but takes and returns float
+     -:   662:     */
+     -:   663:extern _ARMABI long double logbl(long double /*x*/);
+     -:   664:    /*
+     -:   665:     * Like logb but takes and returns long double
+     -:   666:     */
+     -:   667:extern _ARMABI double nextafter(double /*x*/, double /*y*/);
+     -:   668:    /*
+     -:   669:     * Returns the next representable number after x, in the
+     -:   670:     * direction toward y.
+     -:   671:     */
+     -:   672:extern _ARMABI float nextafterf(float /*x*/, float /*y*/);
+     -:   673:    /*
+     -:   674:     * Returns the next representable number after x, in the
+     -:   675:     * direction toward y.
+     -:   676:     */
+     -:   677:extern _ARMABI long double nextafterl(long double /*x*/, long double /*y*/);
+     -:   678:    /*
+     -:   679:     * Returns the next representable number after x, in the
+     -:   680:     * direction toward y.
+     -:   681:     */
+     -:   682:extern _ARMABI double nexttoward(double /*x*/, long double /*y*/);
+     -:   683:    /*
+     -:   684:     * Returns the next representable number after x, in the
+     -:   685:     * direction toward y.
+     -:   686:     */
+     -:   687:extern _ARMABI float nexttowardf(float /*x*/, long double /*y*/);
+     -:   688:    /*
+     -:   689:     * Returns the next representable number after x, in the
+     -:   690:     * direction toward y.
+     -:   691:     */
+     -:   692:extern _ARMABI long double nexttowardl(long double /*x*/, long double /*y*/);
+     -:   693:    /*
+     -:   694:     * Returns the next representable number after x, in the
+     -:   695:     * direction toward y.
+     -:   696:     */
+     -:   697:extern _ARMABI double remainder(double /*x*/, double /*y*/);
+     -:   698:    /*
+     -:   699:     * Returns the remainder of x by y, in the IEEE 754 sense.
+     -:   700:     */
+     -:   701:extern _ARMABI_FPEXCEPT double rint(double /*x*/);
+     -:   702:    /*
+     -:   703:     * Rounds x to an integer, in the IEEE 754 sense.
+     -:   704:     */
+     -:   705:extern _ARMABI double scalbln(double /*x*/, long int /*n*/);
+     -:   706:    /*
+     -:   707:     * Compute x times 2^n quickly.
+     -:   708:     */
+     -:   709:extern _ARMABI float scalblnf(float /*x*/, long int /*n*/);
+     -:   710:    /*
+     -:   711:     * Compute x times 2^n quickly.
+     -:   712:     */
+     -:   713:extern _ARMABI long double scalblnl(long double /*x*/, long int /*n*/);
+     -:   714:    /*
+     -:   715:     * Compute x times 2^n quickly.
+     -:   716:     */
+     -:   717:extern _ARMABI double scalbn(double /*x*/, int /*n*/);
+     -:   718:    /*
+     -:   719:     * Compute x times 2^n quickly.
+     -:   720:     */
+     -:   721:extern _ARMABI float scalbnf(float /*x*/, int /*n*/);
+     -:   722:    /*
+     -:   723:     * Compute x times 2^n quickly.
+     -:   724:     */
+     -:   725:extern _ARMABI long double scalbnl(long double /*x*/, int /*n*/);
+     -:   726:    /*
+     -:   727:     * Compute x times 2^n quickly.
+     -:   728:     */
+     -:   729:#define signbit(x) \
+     -:   730:    ((sizeof(x) == sizeof(float)) \
+     -:   731:        ? __ARM_signbitf(x) \
+     -:   732:        : __ARM_signbit(x))
+     -:   733:    /*
+     -:   734:     * Returns the signbit of x, size independent macro
+     -:   735:     */
+     -:   736:#endif
+     -:   737:
+     -:   738:/* C99 float versions of functions.  math.h has always reserved these
+     -:   739:   identifiers for this purpose (7.13.4). */
+     -:   740:extern _ARMABI_PURE float fabsf(float);
+     -:   741:_ARMABI_INLINE _ARMABI_PURE float _fabsf(float __f) { return fabsf(__f); } /* old ARM name */
+     -:   742:extern _ARMABI float sinf(float /*x*/);
+     -:   743:extern _ARMABI float cosf(float /*x*/);
+     -:   744:extern _ARMABI float tanf(float /*x*/);
+     -:   745:extern _ARMABI float acosf(float /*x*/);
+     -:   746:extern _ARMABI float asinf(float /*x*/);
+     -:   747:extern _ARMABI float atanf(float /*x*/);
+     -:   748:extern _ARMABI float atan2f(float /*y*/, float /*x*/);
+     -:   749:extern _ARMABI float sinhf(float /*x*/);
+     -:   750:extern _ARMABI float coshf(float /*x*/);
+     -:   751:extern _ARMABI float tanhf(float /*x*/);
+     -:   752:extern _ARMABI float expf(float /*x*/);
+     -:   753:extern _ARMABI float logf(float /*x*/);
+     -:   754:extern _ARMABI float log10f(float /*x*/);
+     -:   755:extern _ARMABI float powf(float /*x*/, float /*y*/);
+     -:   756:extern _ARMABI float sqrtf(float /*x*/);
+     -:   757:extern _ARMABI float ldexpf(float /*x*/, int /*exp*/);
+     -:   758:extern _ARMABI float frexpf(float /*value*/, int * /*exp*/) __attribute__((__nonnull__(2)));
+     -:   759:extern _ARMABI_PURE float ceilf(float /*x*/);
+     -:   760:extern _ARMABI_PURE float floorf(float /*x*/);
+     -:   761:extern _ARMABI float fmodf(float /*x*/, float /*y*/);
+     -:   762:extern _ARMABI float modff(float /*value*/, float * /*iptr*/) __attribute__((__nonnull__(2)));
+     -:   763:
+     -:   764:/* C99 long double versions of functions. */
+     -:   765:/* (also need to have 'using' declarations below) */
+     -:   766:#define _ARMDEFLD1(f) \
+     -:   767:    _ARMABI long double f##l(long double /*x*/)
+     -:   768:
+     -:   769:#define _ARMDEFLD1P(f, T) \
+     -:   770:    _ARMABI long double f##l(long double /*x*/, T /*p*/)
+     -:   771:
+     -:   772:#define _ARMDEFLD2(f) \
+     -:   773:    _ARMABI long double f##l(long double /*x*/, long double /*y*/)
+     -:   774:
+     -:   775:/*
+     -:   776: * Long double versions of C89 functions can be defined
+     -:   777: * unconditionally, because C89 reserved these names in "future
+     -:   778: * library directions".
+     -:   779: */
+     -:   780:_ARMDEFLD1(acos);
+     -:   781:_ARMDEFLD1(asin);
+     -:   782:_ARMDEFLD1(atan);
+     -:   783:_ARMDEFLD2(atan2);
+     -:   784:_ARMDEFLD1(ceil);
+     -:   785:_ARMDEFLD1(cos);
+     -:   786:_ARMDEFLD1(cosh);
+     -:   787:_ARMDEFLD1(exp);
+     -:   788:_ARMDEFLD1(fabs);
+     -:   789:_ARMDEFLD1(floor);
+     -:   790:_ARMDEFLD2(fmod);
+     -:   791:_ARMDEFLD1P(frexp, int*) __attribute__((__nonnull__(2)));
+     -:   792:_ARMDEFLD1P(ldexp, int);
+     -:   793:_ARMDEFLD1(log);
+     -:   794:_ARMDEFLD1(log10);
+     -:   795:_ARMABI long double modfl(long double /*x*/, long double * /*p*/) __attribute__((__nonnull__(2)));
+     -:   796:_ARMDEFLD2(pow);
+     -:   797:_ARMDEFLD1(sin);
+     -:   798:_ARMDEFLD1(sinh);
+     -:   799:_ARMDEFLD1(sqrt);
+     -:   800:_ARMDEFLD1(tan);
+     -:   801:_ARMDEFLD1(tanh);
+     -:   802:
+     -:   803:#if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:   804:
+     -:   805:/*
+     -:   806: * C99 float and long double versions of extra-C89 functions.
+     -:   807: */
+     -:   808:extern _ARMABI float acoshf(float /*x*/);
+     -:   809:_ARMDEFLD1(acosh);
+     -:   810:extern _ARMABI float asinhf(float /*x*/);
+     -:   811:_ARMDEFLD1(asinh);
+     -:   812:extern _ARMABI float atanhf(float /*x*/);
+     -:   813:_ARMDEFLD1(atanh);
+     -:   814:_ARMDEFLD2(copysign);
+     -:   815:extern _ARMABI float cbrtf(float /*x*/);
+     -:   816:_ARMDEFLD1(cbrt);
+     -:   817:extern _ARMABI float erff(float /*x*/);
+     -:   818:_ARMDEFLD1(erf);
+     -:   819:extern _ARMABI float erfcf(float /*x*/);
+     -:   820:_ARMDEFLD1(erfc);
+     -:   821:extern _ARMABI float expm1f(float /*x*/);
+     -:   822:_ARMDEFLD1(expm1);
+     -:   823:extern _ARMABI float log1pf(float /*x*/);
+     -:   824:_ARMDEFLD1(log1p);
+     -:   825:extern _ARMABI float hypotf(float /*x*/, float /*y*/);
+     -:   826:_ARMDEFLD2(hypot);
+     -:   827:extern _ARMABI float lgammaf(float /*x*/);
+     -:   828:_ARMDEFLD1(lgamma);
+     -:   829:extern _ARMABI float remainderf(float /*x*/, float /*y*/);
+     -:   830:_ARMDEFLD2(remainder);
+     -:   831:extern _ARMABI float rintf(float /*x*/);
+     -:   832:_ARMDEFLD1(rint);
+     -:   833:
+     -:   834:#endif
+     -:   835:
+     -:   836:#if (defined(__clang__) && !defined(__STRICT_ANSI)) || defined(__USE_C99_MATH)
+     -:   837:/*
+     -:   838: * Functions new in C99.
+     -:   839: */
+     -:   840:extern _ARMABI double exp2(double /*x*/); /* * 2.^x. */
+     -:   841:extern _ARMABI float exp2f(float /*x*/);
+     -:   842:_ARMDEFLD1(exp2);
+     -:   843:extern _ARMABI double fdim(double /*x*/, double /*y*/);
+     -:   844:extern _ARMABI float fdimf(float /*x*/, float /*y*/);
+     -:   845:_ARMDEFLD2(fdim);
+     -:   846:#ifdef __FP_FAST_FMA
+     -:   847:#define FP_FAST_FMA     1
+     -:   848:#endif
+     -:   849:#ifdef __FP_FAST_FMAF
+     -:   850:#define FP_FAST_FMAF    1
+     -:   851:#endif
+     -:   852:#ifdef __FP_FAST_FMAL
+     -:   853:#define FP_FAST_FMAL    1
+     -:   854:#endif
+     -:   855:extern _ARMABI double fma(double /*x*/, double /*y*/, double /*z*/);
+     -:   856:extern _ARMABI float fmaf(float /*x*/, float /*y*/, float /*z*/);
+     -:   857:#ifdef __HAVE_LONGDOUBLE
+     -:   858:_ARMABI_INLINE _ARMABI long double fmal(long double __x, long double __y, long double __z) \
+     -:   859:    { return (long double)fma((double)__x, (double)__y, (double)__z); }
+     -:   860:#endif
+     -:   861:extern _ARMABI_FPEXCEPT double fmax(double /*x*/, double /*y*/);
+     -:   862:extern _ARMABI_FPEXCEPT float fmaxf(float /*x*/, float /*y*/);
+     -:   863:_ARMDEFLD2(fmax);
+     -:   864:extern _ARMABI_FPEXCEPT double fmin(double /*x*/, double /*y*/);
+     -:   865:extern _ARMABI_FPEXCEPT float fminf(float /*x*/, float /*y*/);
+     -:   866:_ARMDEFLD2(fmin);
+     -:   867:extern _ARMABI double log2(double /*x*/); /* * log base 2 of x. */
+     -:   868:extern _ARMABI float log2f(float /*x*/);
+     -:   869:_ARMDEFLD1(log2);
+     -:   870:extern _ARMABI long lrint(double /*x*/);
+     -:   871:extern _ARMABI long lrintf(float /*x*/);
+     -:   872:#ifdef __HAVE_LONGDOUBLE
+     -:   873:_ARMABI_INLINE _ARMABI long lrintl(long double __x) \
+     -:   874:    { return lrint((double)__x); }
+     -:   875:#endif
+     -:   876:extern _ARMABI __LONGLONG llrint(double /*x*/);
+     -:   877:extern _ARMABI __LONGLONG llrintf(float /*x*/);
+     -:   878:#ifdef __HAVE_LONGDOUBLE
+     -:   879:_ARMABI_INLINE _ARMABI __LONGLONG llrintl(long double __x) \
+     -:   880:    { return llrint((double)__x); }
+     -:   881:#endif
+     -:   882:extern _ARMABI long lround(double /*x*/);
+     -:   883:extern _ARMABI long lroundf(float /*x*/);
+     -:   884:#ifdef __HAVE_LONGDOUBLE
+     -:   885:_ARMABI_INLINE _ARMABI long lroundl(long double __x) \
+     -:   886:    { return lround((double)__x); }
+     -:   887:#endif
+     -:   888:extern _ARMABI __LONGLONG llround(double /*x*/);
+     -:   889:extern _ARMABI __LONGLONG llroundf(float /*x*/);
+     -:   890:#ifdef __HAVE_LONGDOUBLE
+     -:   891:_ARMABI_INLINE _ARMABI __LONGLONG llroundl(long double __x) \
+     -:   892:    { return llround((double)__x); }
+     -:   893:#endif
+     -:   894:extern _ARMABI_PURE double nan(const char * /*tagp*/);
+     -:   895:extern _ARMABI_PURE float nanf(const char * /*tagp*/);
+     -:   896:#ifdef __HAVE_LONGDOUBLE
+     -:   897:_ARMABI_INLINE _ARMABI_PURE long double nanl(const char *__t) \
+     -:   898:    { return (long double)nan(__t); }
+     -:   899:#endif
+     -:   900:#if defined(_WANT_SNAN) && defined(__SUPPORT_SNAN__)
+     -:   901:extern _ARMABI_PURE double nans(const char * /*tagp*/);
+     -:   902:extern _ARMABI_PURE float nansf(const char * /*tagp*/);
+     -:   903:#ifdef __HAVE_LONGDOUBLE
+     -:   904:_ARMABI_INLINE _ARMABI_FPEXCEPT long double nansl(const char *__t) \
+     -:   905:    { return (long double)nans(__t); }
+     -:   906:#endif
+     -:   907:#endif
+     -:   908:extern _ARMABI_FPEXCEPT double nearbyint(double /*x*/);
+     -:   909:extern _ARMABI_FPEXCEPT float nearbyintf(float /*x*/);
+     -:   910:_ARMDEFLD1(nearbyint);
+     -:   911:extern _ARMABI double remquo(double /*x*/, double /*y*/, int * /*quo*/);
+     -:   912:extern _ARMABI float remquof(float /*x*/, float /*y*/, int * /*quo*/);
+     -:   913:#ifdef __HAVE_LONGDOUBLE
+     -:   914:_ARMABI_INLINE long double remquol(long double __x, long double __y, int *__q) \
+     -:   915:    { return (long double)remquo((double)__x, (double)__y, __q); }
+     -:   916:#endif
+     -:   917:extern _ARMABI_FPEXCEPT double round(double /*x*/);
+     -:   918:extern _ARMABI_FPEXCEPT float roundf(float /*x*/);
+     -:   919:_ARMDEFLD1(round);
+     -:   920:extern _ARMABI double tgamma(double /*x*/); /* * The gamma function of x. */
+     -:   921:extern _ARMABI float tgammaf(float /*x*/);
+     -:   922:_ARMDEFLD1(tgamma);
+     -:   923:extern _ARMABI_FPEXCEPT double trunc(double /*x*/);
+     -:   924:extern _ARMABI_FPEXCEPT float truncf(float /*x*/);
+     -:   925:_ARMDEFLD1(trunc);
+     -:   926:#endif
+     -:   927:
+     -:   928:#undef _ARMDEFLD1
+     -:   929:#undef _ARMDEFLD1P
+     -:   930:#undef _ARMDEFLD2
+     -:   931:
+     -:   932:#if defined(__cplusplus) && ((!defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)) || defined(__ARMCOMPILER_LIBCXX))
+     -:   933:  #ifdef _LIBCPP_NODISCARD_EXT
+     -:   934:    #define _ARM_NODISCARD_EXT _LIBCPP_NODISCARD_EXT
+     -:   935:  #else
+     -:   936:    #define _ARM_NODISCARD_EXT
+     -:   937:  #endif
+     -:   938:
+     -:   939:  #ifdef _NOEXCEPT
+     -:   940:    #define _ARM_NOEXCEPT _NOEXCEPT
+     -:   941:  #else
+     -:   942:    #define _ARM_NOEXCEPT
+     -:   943:  #endif
+     -:   944:
+     -:   945:  extern "C++" {
+     -:   946:    _ARM_NODISCARD_EXT inline int (fpclassify)(double __x) _ARM_NOEXCEPT { return fpclassify(__x); }
+     -:   947:    _ARM_NODISCARD_EXT inline bool (isfinite)(double __x) _ARM_NOEXCEPT { return isfinite(__x); }
+     -:   948:    _ARM_NODISCARD_EXT inline bool (isgreater)(double __x, double __y) _ARM_NOEXCEPT { return isgreater(__x, __y); }
+     -:   949:    _ARM_NODISCARD_EXT inline bool (isgreaterequal)(double __x, double __y) _ARM_NOEXCEPT { return isgreaterequal(__x, __y); }
+     -:   950:    _ARM_NODISCARD_EXT inline bool (isinf)(double __x) _ARM_NOEXCEPT { return isinf(__x); }
+     -:   951:    _ARM_NODISCARD_EXT inline bool (isless)(double __x, double __y) _ARM_NOEXCEPT { return isless(__x, __y); }
+     -:   952:    _ARM_NODISCARD_EXT inline bool (islessequal)(double __x, double __y) _ARM_NOEXCEPT { return islessequal(__x, __y); }
+     -:   953:    _ARM_NODISCARD_EXT inline bool (islessgreater)(double __x, double __y) _ARM_NOEXCEPT { return islessgreater(__x, __y); }
+     -:   954:    _ARM_NODISCARD_EXT inline bool (isnan)(double __x) _ARM_NOEXCEPT { return isnan(__x); }
+     -:   955:    _ARM_NODISCARD_EXT inline bool (isnormal)(double __x) _ARM_NOEXCEPT { return isnormal(__x); }
+     -:   956:    _ARM_NODISCARD_EXT inline bool (isunordered)(double __x, double __y) _ARM_NOEXCEPT { return isunordered(__x, __y); }
+     -:   957:
+     -:   958:  }
+     -:   959:#endif
+     -:   960:
+     -:   961:#if defined(__cplusplus) && !defined(__ARMCOMPILER_LIBCXX)
+     -:   962:  extern "C++" {
+     -:   963:    inline float abs(float __x)   { return fabsf(__x); }
+     -:   964:    inline float acos(float __x)  { return acosf(__x); }
+     -:   965:    inline float asin(float __x)  { return asinf(__x); }
+     -:   966:    inline float atan(float __x)  { return atanf(__x); }
+     -:   967:    inline float atan2(float __y, float __x)    { return atan2f(__y,__x); }
+     -:   968:    inline float ceil(float __x)  { return ceilf(__x); }
+     -:   969:    inline float cos(float __x)   { return cosf(__x); }
+     -:   970:    inline float cosh(float __x)  { return coshf(__x); }
+     -:   971:    inline float exp(float __x)   { return expf(__x); }
+     -:   972:    inline float fabs(float __x)  { return fabsf(__x); }
+     -:   973:    inline float floor(float __x) { return floorf(__x); }
+     -:   974:    inline float fmod(float __x, float __y)     { return fmodf(__x, __y); }
+     -:   975:    float frexp(float __x, int* __exp) __attribute__((__nonnull__(2)));
+     -:   976:    inline float frexp(float __x, int* __exp)   { return frexpf(__x, __exp); }
+     -:   977:    inline float ldexp(float __x, int __exp)    { return ldexpf(__x, __exp);}
+     -:   978:    inline float log(float __x)   { return logf(__x); }
+     -:   979:    inline float log10(float __x) { return log10f(__x); }
+     -:   980:    float modf(float __x, float* __iptr) __attribute__((__nonnull__(2)));
+     -:   981:    inline float modf(float __x, float* __iptr) { return modff(__x, __iptr); }
+     -:   982:    inline float pow(float __x, float __y)      { return powf(__x,__y); }
+     -:   983:    inline float pow(float __x, int __y)     { return powf(__x, (float)__y); }
+     -:   984:    inline float sin(float __x)   { return sinf(__x); }
+     -:   985:    inline float sinh(float __x)  { return sinhf(__x); }
+     -:   986:    inline float sqrt(float __x)  { return sqrtf(__x); }
+     -:   987:    inline float _sqrt(float __x) { return _sqrtf(__x); }
+     -:   988:    inline float tan(float __x)   { return tanf(__x); }
+     -:   989:    inline float tanh(float __x)  { return tanhf(__x); }
+     -:   990:
+     -:   991:    inline double abs(double __x) { return fabs(__x); }
+     -:   992:    inline double pow(double __x, int __y)
+     -:   993:                { return pow(__x, (double) __y); }
+     -:   994:
+     -:   995:#ifdef __HAVE_LONGDOUBLE
+     -:   996:    inline long double abs(long double __x)
+     -:   997:                { return (long double)fabsl(__x); }
+     -:   998:    inline long double acos(long double __x)
+     -:   999:                { return (long double)acosl(__x); }
+     -:  1000:    inline long double asin(long double __x)
+     -:  1001:                { return (long double)asinl(__x); }
+     -:  1002:    inline long double atan(long double __x)
+     -:  1003:                { return (long double)atanl(__x); }
+     -:  1004:    inline long double atan2(long double __y, long double __x)
+     -:  1005:                { return (long double)atan2l(__y, __x); }
+     -:  1006:    inline long double ceil(long double __x)
+     -:  1007:                { return (long double)ceill( __x); }
+     -:  1008:    inline long double cos(long double __x)
+     -:  1009:                { return (long double)cosl(__x); }
+     -:  1010:    inline long double cosh(long double __x)
+     -:  1011:                { return (long double)coshl(__x); }
+     -:  1012:    inline long double exp(long double __x)
+     -:  1013:                { return (long double)expl(__x); }
+     -:  1014:    inline long double fabs(long double __x)
+     -:  1015:                { return (long double)fabsl(__x); }
+     -:  1016:    inline long double floor(long double __x)
+     -:  1017:                { return (long double)floorl(__x); }
+     -:  1018:    inline long double fmod(long double __x, long double __y)
+     -:  1019:                { return (long double)fmodl(__x, __y); }
+     -:  1020:    long double frexp(long double __x, int* __p) __attribute__((__nonnull__(2)));
+     -:  1021:    inline long double frexp(long double __x, int* __p)
+     -:  1022:                { return (long double)frexpl(__x, __p); }
+     -:  1023:    inline long double ldexp(long double __x, int __exp)
+     -:  1024:                { return (long double)ldexpl(__x, __exp); }
+     -:  1025:    inline long double log(long double __x)
+     -:  1026:                { return (long double)logl(__x); }
+     -:  1027:    inline long double log10(long double __x)
+     -:  1028:                { return (long double)log10l(__x); }
+     -:  1029:    long double modf(long double __x, long double* __p) __attribute__((__nonnull__(2)));
+     -:  1030:    inline long double modf(long double __x, long double* __p)
+     -:  1031:                { return (long double)modfl(__x, __p); }
+     -:  1032:    inline long double pow(long double __x, long double __y)
+     -:  1033:                { return (long double)powl(__x, __y); }
+     -:  1034:    inline long double pow(long double __x, int __y)
+     -:  1035:                { return (long double)powl(__x, __y); }
+     -:  1036:    inline long double sin(long double __x)
+     -:  1037:                { return (long double)sinl(__x); }
+     -:  1038:    inline long double sinh(long double __x)
+     -:  1039:                { return (long double)sinhl(__x); }
+     -:  1040:    inline long double sqrt(long double __x)
+     -:  1041:                { return (long double)sqrtl(__x); }
+     -:  1042:    inline long double _sqrt(long double __x)
+     -:  1043:                { return (long double)_sqrt((double) __x); }
+     -:  1044:    inline long double tan(long double __x)
+     -:  1045:                { return (long double)tanl(__x); }
+     -:  1046:    inline long double tanh(long double __x)
+     -:  1047:                { return (long double)tanhl(__x); }
+     -:  1048:#endif
+     -:  1049:
+     -:  1050:#if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:  1051:    inline float acosh(float __x) { return acoshf(__x); }
+     -:  1052:    inline float asinh(float __x) { return asinhf(__x); }
+     -:  1053:    inline float atanh(float __x) { return atanhf(__x); }
+     -:  1054:    inline float cbrt(float __x) { return cbrtf(__x); }
+     -:  1055:    inline float erf(float __x) { return erff(__x); }
+     -:  1056:    inline float erfc(float __x) { return erfcf(__x); }
+     -:  1057:    inline float expm1(float __x) { return expm1f(__x); }
+     -:  1058:    inline float log1p(float __x) { return log1pf(__x); }
+     -:  1059:    inline float hypot(float __x, float __y) { return hypotf(__x, __y); }
+     -:  1060:    inline float lgamma(float __x) { return lgammaf(__x); }
+     -:  1061:    inline float remainder(float __x, float __y) { return remainderf(__x, __y); }
+     -:  1062:    inline float rint(float __x) { return rintf(__x); }
+     -:  1063:#endif
+     -:  1064:
+     -:  1065:#ifdef __USE_C99_MATH
+     -:  1066:    inline float exp2(float __x) { return exp2f(__x); }
+     -:  1067:    inline float fdim(float __x, float __y) { return fdimf(__x, __y); }
+     -:  1068:    inline float fma(float __x, float __y, float __z) { return fmaf(__x, __y, __z); }
+     -:  1069:    inline float fmax(float __x, float __y) { return fmaxf(__x, __y); }
+     -:  1070:    inline float fmin(float __x, float __y) { return fminf(__x, __y); }
+     -:  1071:    inline float log2(float __x) { return log2f(__x); }
+     -:  1072:    inline _ARMABI long lrint(float __x) { return lrintf(__x); }
+     -:  1073:    inline _ARMABI __LONGLONG llrint(float __x) { return llrintf(__x); }
+     -:  1074:    inline _ARMABI long lround(float __x) { return lroundf(__x); }
+     -:  1075:    inline _ARMABI __LONGLONG llround(float __x) { return llroundf(__x); }
+     -:  1076:    inline _ARMABI_FPEXCEPT float nearbyint(float __x) { return nearbyintf(__x); }
+     -:  1077:    inline float remquo(float __x, float __y, int *__q) { return remquof(__x, __y, __q); }
+     -:  1078:    inline _ARMABI_FPEXCEPT float round(float __x) { return roundf(__x); }
+     -:  1079:    inline float tgamma(float __x) { return tgammaf(__x); }
+     -:  1080:    inline _ARMABI_FPEXCEPT float trunc(float __x) { return truncf(__x); }
+     -:  1081:
+     -:  1082:    inline int (fpclassify)(float __x) { return fpclassify(__x); }
+     -:  1083:    inline bool (isfinite)(float __x) { return isfinite(__x); }
+     -:  1084:    inline bool (isgreater)(float __x, float __y) { return isgreater(__x, __y); }
+     -:  1085:    inline bool (isgreaterequal)(float __x, float __y) { return isgreaterequal(__x, __y); }
+     -:  1086:    inline bool (isinf)(float __x) { return isinf(__x); }
+     -:  1087:    inline bool (isless)(float __x, float __y) { return isless(__x, __y); }
+     -:  1088:    inline bool (islessequal)(float __x, float __y) { return islessequal(__x, __y); }
+     -:  1089:    inline bool (islessgreater)(float __x, float __y) { return islessgreater(__x, __y); }
+     -:  1090:    inline bool (isnan)(float __x) { return isnan(__x); }
+     -:  1091:    inline bool (isnormal)(float __x) { return isnormal(__x); }
+     -:  1092:    inline bool (isunordered)(float __x, float __y) { return isunordered(__x, __y); }
+     -:  1093:
+     -:  1094:#ifdef __HAVE_LONGDOUBLE
+     -:  1095:    inline long double acosh(long double __x) { return acoshl(__x); }
+     -:  1096:    inline long double asinh(long double __x) { return asinhl(__x); }
+     -:  1097:    inline long double atanh(long double __x) { return atanhl(__x); }
+     -:  1098:    inline long double cbrt(long double __x) { return cbrtl(__x); }
+     -:  1099:    inline long double erf(long double __x) { return erfl(__x); }
+     -:  1100:    inline long double erfc(long double __x) { return erfcl(__x); }
+     -:  1101:    inline long double expm1(long double __x) { return expm1l(__x); }
+     -:  1102:    inline long double log1p(long double __x) { return log1pl(__x); }
+     -:  1103:    inline long double hypot(long double __x, long double __y) { return hypotl(__x, __y); }
+     -:  1104:    inline long double lgamma(long double __x) { return lgammal(__x); }
+     -:  1105:    inline long double remainder(long double __x, long double __y) { return remainderl(__x, __y); }
+     -:  1106:    inline long double rint(long double __x) { return rintl(__x); }
+     -:  1107:    inline long double exp2(long double __x) { return exp2l(__x); }
+     -:  1108:    inline long double fdim(long double __x, long double __y) { return fdiml(__x, __y); }
+     -:  1109:    inline long double fma(long double __x, long double __y, long double __z) { return fmal(__x, __y, __z); }
+     -:  1110:    inline long double fmax(long double __x, long double __y) { return fmaxl(__x, __y); }
+     -:  1111:    inline long double fmin(long double __x, long double __y) { return fminl(__x, __y); }
+     -:  1112:    inline long double log2(long double __x) { return log2l(__x); }
+     -:  1113:    inline _ARMABI long lrint(long double __x) { return lrintl(__x); }
+     -:  1114:    inline _ARMABI __LONGLONG llrint(long double __x) { return llrintl(__x); }
+     -:  1115:    inline _ARMABI long lround(long double __x) { return lroundl(__x); }
+     -:  1116:    inline _ARMABI __LONGLONG llround(long double __x) { return llroundl(__x); }
+     -:  1117:    inline _ARMABI_FPEXCEPT long double nearbyint(long double __x) { return nearbyintl(__x); }
+     -:  1118:    inline long double remquo(long double __x, long double __y, int *__q) { return remquol(__x, __y, __q); }
+     -:  1119:    inline _ARMABI_FPEXCEPT long double round(long double __x) { return roundl(__x); }
+     -:  1120:    inline long double tgamma(long double __x) { return tgammal(__x); }
+     -:  1121:    inline _ARMABI_FPEXCEPT long double trunc(long double __x) { return truncl(__x); }
+     -:  1122:    inline int (fpclassify)(long double __x) { return fpclassify(__x); }
+     -:  1123:    inline bool (isfinite)(long double __x) { return isfinite(__x); }
+     -:  1124:    inline bool (isgreater)(long double __x, long double __y) { return isgreater(__x, __y); }
+     -:  1125:    inline bool (isgreaterequal)(long double __x, long double __y) { return isgreaterequal(__x, __y); }
+     -:  1126:    inline bool (isinf)(long double __x) { return isinf(__x); }
+     -:  1127:    inline bool (isless)(long double __x, long double __y) { return isless(__x, __y); }
+     -:  1128:    inline bool (islessequal)(long double __x, long double __y) { return islessequal(__x, __y); }
+     -:  1129:    inline bool (islessgreater)(long double __x, long double __y) { return islessgreater(__x, __y); }
+     -:  1130:    inline bool (isnan)(long double __x) { return isnan(__x); }
+     -:  1131:    inline bool (isnormal)(long double __x) { return isnormal(__x); }
+     -:  1132:    inline bool (isunordered)(long double __x, long double __y) { return isunordered(__x, __y); }
+     -:  1133:#endif
+     -:  1134:
+     -:  1135:#undef fpclassify
+     -:  1136:#undef isfinite
+     -:  1137:#undef isgreater
+     -:  1138:#undef isgreaterequal
+     -:  1139:#undef isinf
+     -:  1140:#undef isless
+     -:  1141:#undef islessequal
+     -:  1142:#undef islessgreater
+     -:  1143:#undef isnan
+     -:  1144:#undef isnormal
+     -:  1145:#undef isunordered
+     -:  1146:
+     -:  1147:#endif
+     -:  1148:
+     -:  1149:  }
+     -:  1150:#endif
+     -:  1151:
+     -:  1152:    #ifdef __cplusplus
+     -:  1153:        }  /* extern "C" */
+     -:  1154:      }  /* namespace std */
+     -:  1155:    #endif
+     -:  1156:  #endif /* __MATH_DECLS */
+     -:  1157:
+     -:  1158:  #if _AEABI_PORTABILITY_LEVEL != 0 && !defined _AEABI_PORTABLE
+     -:  1159:    #define _AEABI_PORTABLE
+     -:  1160:  #endif
+     -:  1161:
+     -:  1162:  #if defined(__cplusplus) && !defined(__MATH_NO_EXPORTS)
+     -:  1163:    using ::std::__use_accurate_range_reduction;
+     -:  1164:    #ifndef __ARMCOMPILER_LIBCXX
+     -:  1165:      using ::std::abs;
+     -:  1166:    #endif
+     -:  1167:    using ::std::acos;
+     -:  1168:    using ::std::asin;
+     -:  1169:    using ::std::atan2;
+     -:  1170:    using ::std::atan;
+     -:  1171:    using ::std::ceil;
+     -:  1172:    using ::std::cos;
+     -:  1173:    using ::std::cosh;
+     -:  1174:    using ::std::exp;
+     -:  1175:    using ::std::fabs;
+     -:  1176:    using ::std::floor;
+     -:  1177:    using ::std::fmod;
+     -:  1178:    using ::std::frexp;
+     -:  1179:    using ::std::ldexp;
+     -:  1180:    using ::std::log10;
+     -:  1181:    using ::std::log;
+     -:  1182:    using ::std::modf;
+     -:  1183:    using ::std::pow;
+     -:  1184:    using ::std::sin;
+     -:  1185:    using ::std::sinh;
+     -:  1186:    using ::std::sqrt;
+     -:  1187:    using ::std::_sqrt;
+     -:  1188:    using ::std::_sqrtf;
+     -:  1189:    using ::std::tan;
+     -:  1190:    using ::std::tanh;
+     -:  1191:    using ::std::_fabsf;
+     -:  1192:    /* C99 float and long double versions in already-C89-reserved namespace */
+     -:  1193:    using ::std::acosf;
+     -:  1194:    using ::std::acosl;
+     -:  1195:    using ::std::asinf;
+     -:  1196:    using ::std::asinl;
+     -:  1197:    using ::std::atan2f;
+     -:  1198:    using ::std::atan2l;
+     -:  1199:    using ::std::atanf;
+     -:  1200:    using ::std::atanl;
+     -:  1201:    using ::std::ceilf;
+     -:  1202:    using ::std::ceill;
+     -:  1203:    using ::std::cosf;
+     -:  1204:    using ::std::coshf;
+     -:  1205:    using ::std::coshl;
+     -:  1206:    using ::std::cosl;
+     -:  1207:    using ::std::expf;
+     -:  1208:    using ::std::expl;
+     -:  1209:    using ::std::fabsf;
+     -:  1210:    using ::std::fabsl;
+     -:  1211:    using ::std::floorf;
+     -:  1212:    using ::std::floorl;
+     -:  1213:    using ::std::fmodf;
+     -:  1214:    using ::std::fmodl;
+     -:  1215:    using ::std::frexpf;
+     -:  1216:    using ::std::frexpl;
+     -:  1217:    using ::std::ldexpf;
+     -:  1218:    using ::std::ldexpl;
+     -:  1219:    using ::std::log10f;
+     -:  1220:    using ::std::log10l;
+     -:  1221:    using ::std::logf;
+     -:  1222:    using ::std::logl;
+     -:  1223:    using ::std::modff;
+     -:  1224:    using ::std::modfl;
+     -:  1225:    using ::std::powf;
+     -:  1226:    using ::std::powl;
+     -:  1227:    using ::std::sinf;
+     -:  1228:    using ::std::sinhf;
+     -:  1229:    using ::std::sinhl;
+     -:  1230:    using ::std::sinl;
+     -:  1231:    using ::std::sqrtf;
+     -:  1232:    using ::std::sqrtl;
+     -:  1233:    using ::std::tanf;
+     -:  1234:    using ::std::tanhf;
+     -:  1235:    using ::std::tanhl;
+     -:  1236:    using ::std::tanl;
+     -:  1237:    #if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:  1238:      /* C99 additions which for historical reasons appear in non-strict mode */
+     -:  1239:      using ::std::acosh;
+     -:  1240:      using ::std::asinh;
+     -:  1241:      using ::std::atanh;
+     -:  1242:      using ::std::cbrt;
+     -:  1243:      using ::std::copysign;
+     -:  1244:      using ::std::copysignf;
+     -:  1245:      using ::std::erf;
+     -:  1246:      using ::std::erfc;
+     -:  1247:      using ::std::expm1;
+     -:  1248:      using ::std::hypot;
+     -:  1249:      using ::std::ilogb;
+     -:  1250:      using ::std::ilogbf;
+     -:  1251:      using ::std::ilogbl;
+     -:  1252:      using ::std::lgamma;
+     -:  1253:      using ::std::log1p;
+     -:  1254:      using ::std::logb;
+     -:  1255:      using ::std::logbf;
+     -:  1256:      using ::std::logbl;
+     -:  1257:      using ::std::nextafter;
+     -:  1258:      using ::std::nextafterf;
+     -:  1259:      using ::std::nextafterl;
+     -:  1260:      using ::std::nexttoward;
+     -:  1261:      using ::std::nexttowardf;
+     -:  1262:      using ::std::nexttowardl;
+     -:  1263:      using ::std::remainder;
+     -:  1264:      using ::std::rint;
+     -:  1265:      using ::std::scalbln;
+     -:  1266:      using ::std::scalblnf;
+     -:  1267:      using ::std::scalblnl;
+     -:  1268:      using ::std::scalbn;
+     -:  1269:      using ::std::scalbnf;
+     -:  1270:      using ::std::scalbnl;
+     -:  1271:      using ::std::math_errhandling;
+     -:  1272:      using ::std::acoshf;
+     -:  1273:      using ::std::acoshl;
+     -:  1274:      using ::std::asinhf;
+     -:  1275:      using ::std::asinhl;
+     -:  1276:      using ::std::atanhf;
+     -:  1277:      using ::std::atanhl;
+     -:  1278:      using ::std::copysignl;
+     -:  1279:      using ::std::cbrtf;
+     -:  1280:      using ::std::cbrtl;
+     -:  1281:      using ::std::erff;
+     -:  1282:      using ::std::erfl;
+     -:  1283:      using ::std::erfcf;
+     -:  1284:      using ::std::erfcl;
+     -:  1285:      using ::std::expm1f;
+     -:  1286:      using ::std::expm1l;
+     -:  1287:      using ::std::log1pf;
+     -:  1288:      using ::std::log1pl;
+     -:  1289:      using ::std::hypotf;
+     -:  1290:      using ::std::hypotl;
+     -:  1291:      using ::std::lgammaf;
+     -:  1292:      using ::std::lgammal;
+     -:  1293:      using ::std::remainderf;
+     -:  1294:      using ::std::remainderl;
+     -:  1295:      using ::std::rintf;
+     -:  1296:      using ::std::rintl;
+     -:  1297:      /* New in C99. */
+     -:  1298:      using ::std::float_t;
+     -:  1299:      using ::std::double_t;
+     -:  1300:    #endif
+     -:  1301:    #if (defined(__clang__) && !defined(__STRICT_ANSI)) || defined(__USE_C99_MATH)
+     -:  1302:      /* Functions new in C99. */
+     -:  1303:      using ::std::exp2;
+     -:  1304:      using ::std::exp2f;
+     -:  1305:      using ::std::exp2l;
+     -:  1306:      using ::std::fdim;
+     -:  1307:      using ::std::fdimf;
+     -:  1308:      using ::std::fdiml;
+     -:  1309:      using ::std::fma;
+     -:  1310:      using ::std::fmaf;
+     -:  1311:#ifdef __HAVE_LONGDOUBLE
+     -:  1312:      using ::std::fmal;
+     -:  1313:#endif
+     -:  1314:      using ::std::fmax;
+     -:  1315:      using ::std::fmaxf;
+     -:  1316:      using ::std::fmaxl;
+     -:  1317:      using ::std::fmin;
+     -:  1318:      using ::std::fminf;
+     -:  1319:      using ::std::fminl;
+     -:  1320:      using ::std::log2;
+     -:  1321:      using ::std::log2f;
+     -:  1322:      using ::std::log2l;
+     -:  1323:      using ::std::lrint;
+     -:  1324:      using ::std::lrintf;
+     -:  1325:#ifdef __HAVE_LONGDOUBLE
+     -:  1326:      using ::std::lrintl;
+     -:  1327:#endif
+     -:  1328:      using ::std::llrint;
+     -:  1329:      using ::std::llrintf;
+     -:  1330:#ifdef __HAVE_LONGDOUBLE
+     -:  1331:      using ::std::llrintl;
+     -:  1332:#endif
+     -:  1333:      using ::std::lround;
+     -:  1334:      using ::std::lroundf;
+     -:  1335:#ifdef __HAVE_LONGDOUBLE
+     -:  1336:      using ::std::lroundl;
+     -:  1337:#endif
+     -:  1338:      using ::std::llround;
+     -:  1339:      using ::std::llroundf;
+     -:  1340:#ifdef __HAVE_LONGDOUBLE
+     -:  1341:      using ::std::llroundl;
+     -:  1342:#endif
+     -:  1343:      using ::std::nan;
+     -:  1344:      using ::std::nanf;
+     -:  1345:#ifdef __HAVE_LONGDOUBLE
+     -:  1346:      using ::std::nanl;
+     -:  1347:#endif
+     -:  1348:      using ::std::nearbyint;
+     -:  1349:      using ::std::nearbyintf;
+     -:  1350:      using ::std::nearbyintl;
+     -:  1351:      using ::std::remquo;
+     -:  1352:      using ::std::remquof;
+     -:  1353:#ifdef __HAVE_LONGDOUBLE
+     -:  1354:      using ::std::remquol;
+     -:  1355:#endif
+     -:  1356:      using ::std::round;
+     -:  1357:      using ::std::roundf;
+     -:  1358:      using ::std::roundl;
+     -:  1359:      using ::std::tgamma;
+     -:  1360:      using ::std::tgammaf;
+     -:  1361:      using ::std::tgammal;
+     -:  1362:      using ::std::trunc;
+     -:  1363:      using ::std::truncf;
+     -:  1364:      using ::std::truncl;
+     -:  1365:    #endif
+     -:  1366:
+     -:  1367:    #if !defined(__STRICT_ANSI__) || defined(__USE_C99_MATH)
+     -:  1368:      using ::std::fpclassify;
+     -:  1369:      using ::std::isfinite;
+     -:  1370:      using ::std::isgreater;
+     -:  1371:      using ::std::isgreaterequal;
+     -:  1372:      using ::std::isinf;
+     -:  1373:      using ::std::isless;
+     -:  1374:      using ::std::islessequal;
+     -:  1375:      using ::std::islessgreater;
+     -:  1376:      using ::std::isnan;
+     -:  1377:      using ::std::isnormal;
+     -:  1378:      using ::std::isunordered;
+     -:  1379:    #endif
+     -:  1380:  #endif
+     -:  1381:
+     -:  1382:#undef __LONGLONG
+     -:  1383:
+     -:  1384:#endif /* __math_h */
+     -:  1385:
+     -:  1386:/* end of math.h */

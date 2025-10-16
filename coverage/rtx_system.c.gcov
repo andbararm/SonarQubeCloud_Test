@@ -1,0 +1,224 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_system.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       System functions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#include "rtx_lib.h"
+     -:    27:
+     -:    28:
+     -:    29://  ==== Helper functions ====
+     -:    30:
+     -:    31:/// Put Object into ISR Queue.
+     -:    32:/// \param[in]  object          object.
+     -:    33:/// \return 1 - success, 0 - failure.
+     -:    34:static uint32_t isr_queue_put (os_object_t *object) {
+     -:    35:#if (EXCLUSIVE_ACCESS == 0)
+     -:    36:  uint32_t primask = __get_PRIMASK();
+     -:    37:#else
+     -:    38:  uint32_t n;
+     -:    39:#endif
+     -:    40:  uint16_t max;
+     -:    41:  uint32_t ret;
+     -:    42:
+ #####:    43:  max = osRtxInfo.isr_queue.max;
+     -:    44:
+     -:    45:#if (EXCLUSIVE_ACCESS == 0)
+     -:    46:  __disable_irq();
+     -:    47:
+     -:    48:  if (osRtxInfo.isr_queue.cnt < max) {
+     -:    49:    osRtxInfo.isr_queue.cnt++;
+     -:    50:    osRtxInfo.isr_queue.data[osRtxInfo.isr_queue.in] = object;
+     -:    51:    if (++osRtxInfo.isr_queue.in == max) {
+     -:    52:      osRtxInfo.isr_queue.in = 0U;
+     -:    53:    }
+     -:    54:    ret = 1U;
+     -:    55:  } else {
+     -:    56:    ret = 0U;
+     -:    57:  }
+     -:    58:  
+     -:    59:  if (primask == 0U) {
+     -:    60:    __enable_irq();
+     -:    61:  }
+     -:    62:#else
+ #####:    63:  if (atomic_inc16_lt(&osRtxInfo.isr_queue.cnt, max) < max) {
+ #####:    64:    n = atomic_inc16_lim(&osRtxInfo.isr_queue.in, max);
+ #####:    65:    osRtxInfo.isr_queue.data[n] = object;
+     -:    66:    ret = 1U;
+     -:    67:  } else {
+     -:    68:    ret = 0U;
+     -:    69:  }
+     -:    70:#endif
+     -:    71:
+     -:    72:  return ret;
+     -:    73:}
+     -:    74:
+     -:    75:/// Get Object from ISR Queue.
+     -:    76:/// \return object or NULL.
+     -:    77:static os_object_t *isr_queue_get (void) {
+     -:    78:#if (EXCLUSIVE_ACCESS != 0)
+     -:    79:  uint32_t     n;
+     -:    80:#endif
+     -:    81:  uint16_t     max;
+     -:    82:  os_object_t *ret;
+     -:    83:
+ #####:    84:  max = osRtxInfo.isr_queue.max;
+     -:    85:
+     -:    86:#if (EXCLUSIVE_ACCESS == 0)
+     -:    87:  __disable_irq();
+     -:    88:
+     -:    89:  if (osRtxInfo.isr_queue.cnt != 0U) {
+     -:    90:    osRtxInfo.isr_queue.cnt--;
+     -:    91:    ret = osRtxObject(osRtxInfo.isr_queue.data[osRtxInfo.isr_queue.out]);
+     -:    92:    if (++osRtxInfo.isr_queue.out == max) {
+     -:    93:      osRtxInfo.isr_queue.out = 0U;
+     -:    94:    }
+     -:    95:  } else {
+     -:    96:    ret = NULL;
+     -:    97:  }
+     -:    98:
+     -:    99:  __enable_irq();
+     -:   100:#else
+ #####:   101:  if (atomic_dec16_nz(&osRtxInfo.isr_queue.cnt) != 0U) {
+ #####:   102:    n = atomic_inc16_lim(&osRtxInfo.isr_queue.out, max);
+ #####:   103:    ret = osRtxObject(osRtxInfo.isr_queue.data[n]);
+     -:   104:  } else {
+     -:   105:    ret = NULL;
+     -:   106:  }
+     -:   107:#endif
+     -:   108:
+     -:   109:  return ret;
+     -:   110:}
+     -:   111:
+     -:   112:
+     -:   113://  ==== Library Functions ====
+     -:   114:
+     -:   115:/// Tick Handler.
+     -:   116://lint -esym(714,osRtxTick_Handler) "Referenced by Exception handlers"
+     -:   117://lint -esym(759,osRtxTick_Handler) "Prototype in header"
+     -:   118://lint -esym(765,osRtxTick_Handler) "Global scope"
+  3888:   119:void osRtxTick_Handler (void) {
+     -:   120:  os_thread_t *thread;
+     -:   121:
+  3888:   122:  OS_Tick_AcknowledgeIRQ();
+  3888:   123:  osRtxInfo.kernel.tick++;
+     -:   124:
+     -:   125:  // Process Thread Delays
+  3888:   126:  osRtxThreadDelayTick();
+     -:   127:
+  3888:   128:  osRtxThreadDispatch(NULL);
+     -:   129:
+     -:   130:  // Process Timers
+  3888:   131:  if (osRtxInfo.timer.tick != NULL) {
+  3888:   132:    osRtxInfo.timer.tick();
+     -:   133:  }
+     -:   134:
+     -:   135:#ifdef RTX_THREAD_WATCHDOG
+     -:   136:  // Process Watchdog Timers
+     -:   137:  osRtxThreadWatchdogTick();
+     -:   138:#endif
+     -:   139:
+     -:   140:  // Check Round Robin timeout
+  3888:   141:  if (osRtxInfo.thread.robin.timeout != 0U) {
+  3888:   142:    thread = osRtxInfo.thread.run.next;
+  3888:   143:    if (thread != osRtxInfo.thread.robin.thread) {
+     2:   144:      osRtxInfo.thread.robin.thread = thread;
+     2:   145:      if (thread->delay == 0U) {
+     -:   146:        // Reset Round Robin
+     2:   147:        thread->delay = osRtxInfo.thread.robin.timeout;
+     -:   148:      }
+     -:   149:    }
+  3888:   150:    if (thread->delay != 0U) {
+  3888:   151:      thread->delay--;
+     -:   152:    }
+  3888:   153:    if (thread->delay == 0U) {
+     -:   154:      // Round Robin Timeout
+     -:   155:      if (osRtxKernelGetState() == osRtxKernelRunning) {
+  3880:   156:        thread = osRtxInfo.thread.ready.thread_list;
+  3880:   157:        if ((thread != NULL) && (thread->priority == osRtxInfo.thread.robin.thread->priority)) {
+ #####:   158:          osRtxThreadListRemove(thread);
+ #####:   159:          osRtxThreadReadyPut(osRtxInfo.thread.robin.thread);
+ #####:   160:          EvrRtxThreadPreempted(osRtxInfo.thread.robin.thread);
+ #####:   161:          osRtxThreadSwitch(thread);
+ #####:   162:          osRtxInfo.thread.robin.thread = thread;
+ #####:   163:          thread->delay = osRtxInfo.thread.robin.timeout;
+     -:   164:        }
+     -:   165:      }
+     -:   166:    }
+     -:   167:  }
+     1:   168:}
+     -:   169:
+     -:   170:/// Pending Service Call Handler.
+     -:   171://lint -esym(714,osRtxPendSV_Handler) "Referenced by Exception handlers"
+     -:   172://lint -esym(759,osRtxPendSV_Handler) "Prototype in header"
+     -:   173://lint -esym(765,osRtxPendSV_Handler) "Global scope"
+ #####:   174:void osRtxPendSV_Handler (void) {
+     -:   175:  os_object_t *object;
+     -:   176:
+ #####:   177:  for (;;) {
+     -:   178:    object = isr_queue_get();
+ #####:   179:    if (object == NULL) {
+     -:   180:      break;
+     -:   181:    }
+ #####:   182:    switch (object->id) {
+     -:   183:      case osRtxIdThread:
+     -:   184:        osRtxInfo.post_process.thread(osRtxThreadObject(object));
+     -:   185:        break;
+     -:   186:      case osRtxIdEventFlags:
+     -:   187:        osRtxInfo.post_process.event_flags(osRtxEventFlagsObject(object));
+     -:   188:        break;
+     -:   189:      case osRtxIdSemaphore:
+     -:   190:        osRtxInfo.post_process.semaphore(osRtxSemaphoreObject(object));
+     -:   191:        break;
+     -:   192:      case osRtxIdMemoryPool:
+     -:   193:        osRtxInfo.post_process.memory_pool(osRtxMemoryPoolObject(object));
+     -:   194:        break;
+     -:   195:      case osRtxIdMessage:
+     -:   196:        osRtxInfo.post_process.message(osRtxMessageObject(object));
+     -:   197:        break;
+     -:   198:      default:
+     -:   199:        // Should never come here
+     -:   200:        break;
+     -:   201:    }
+     -:   202:  }
+     -:   203:
+ #####:   204:  osRtxThreadDispatch(NULL);
+     -:   205:}
+     -:   206:
+     -:   207:/// Register post ISR processing.
+     -:   208:/// \param[in]  object          generic object.
+ #####:   209:void osRtxPostProcess (os_object_t *object) {
+     -:   210:
+     -:   211:  if (isr_queue_put(object) != 0U) {
+ #####:   212:    if (osRtxInfo.kernel.blocked == 0U) {
+     -:   213:      SetPendSV();
+     -:   214:    } else {
+ #####:   215:      osRtxInfo.kernel.pendSV = 1U;
+     -:   216:    }
+     -:   217:  } else {
+ #####:   218:    (void)osRtxKernelErrorNotify(osRtxErrorISRQueueOverflow, object);
+     -:   219:  }
+ #####:   220:}

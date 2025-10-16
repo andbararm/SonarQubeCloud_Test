@@ -1,0 +1,823 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS/6.2.0/CMSIS/Core/Include/m-profile/cmsis_armclang_m.h
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2009-2024 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: */
+     -:    18:
+     -:    19:/*
+     -:    20: * CMSIS-Core(M) Compiler ARMClang (Arm Compiler 6) Header File
+     -:    21: */
+     -:    22:
+     -:    23:#ifndef __CMSIS_ARMCLANG_M_H
+     -:    24:#define __CMSIS_ARMCLANG_M_H
+     -:    25:
+     -:    26:#pragma clang system_header   /* treat file as system include file */
+     -:    27:
+     -:    28:#ifndef __CMSIS_ARMCLANG_H
+     -:    29:  #error "This file must not be included directly"
+     -:    30:#endif
+     -:    31:
+     -:    32:#if (__ARM_ACLE >= 200)
+     -:    33:  #include <arm_acle.h>
+     -:    34:#else
+     -:    35:  #error Compiler must support ACLE V2.0
+     -:    36:#endif /* (__ARM_ACLE >= 200) */
+     -:    37:
+     -:    38:/* #########################  Startup and Lowlevel Init  ######################## */
+     -:    39:#ifndef __PROGRAM_START
+     -:    40:#define __PROGRAM_START           __main
+     -:    41:#endif
+     -:    42:
+     -:    43:#ifndef __INITIAL_SP
+     -:    44:#define __INITIAL_SP              Image$$ARM_LIB_STACK$$ZI$$Limit
+     -:    45:#endif
+     -:    46:
+     -:    47:#ifndef __STACK_LIMIT
+     -:    48:#define __STACK_LIMIT             Image$$ARM_LIB_STACK$$ZI$$Base
+     -:    49:#endif
+     -:    50:
+     -:    51:#ifndef __VECTOR_TABLE
+     -:    52:#define __VECTOR_TABLE            __Vectors
+     -:    53:#endif
+     -:    54:
+     -:    55:#ifndef __VECTOR_TABLE_ATTRIBUTE
+     -:    56:#define __VECTOR_TABLE_ATTRIBUTE  __attribute__((used, section("RESET")))
+     -:    57:#endif
+     -:    58:
+     -:    59:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:    60:#ifndef __STACK_SEAL
+     -:    61:#define __STACK_SEAL              Image$$STACKSEAL$$ZI$$Base
+     -:    62:#endif
+     -:    63:
+     -:    64:#ifndef __TZ_STACK_SEAL_SIZE
+     -:    65:#define __TZ_STACK_SEAL_SIZE      8U
+     -:    66:#endif
+     -:    67:
+     -:    68:#ifndef __TZ_STACK_SEAL_VALUE
+     -:    69:#define __TZ_STACK_SEAL_VALUE     0xFEF5EDA5FEF5EDA5ULL
+     -:    70:#endif
+     -:    71:
+     -:    72:__STATIC_FORCEINLINE void __TZ_set_STACKSEAL_S (uint32_t* stackTop)
+     -:    73:{
+     -:    74:  *((uint64_t *)stackTop) = __TZ_STACK_SEAL_VALUE;
+     -:    75:}
+     -:    76:#endif
+     -:    77:
+     -:    78:
+     -:    79:#if (__ARM_ARCH_ISA_THUMB >= 2)
+     -:    80:/**
+     -:    81:  \brief   STRT Unprivileged (8 bit)
+     -:    82:  \details Executes a Unprivileged STRT instruction for 8 bit values.
+     -:    83:  \param [in]  value  Value to store
+     -:    84:  \param [in]    ptr  Pointer to location
+     -:    85: */
+     -:    86:__STATIC_FORCEINLINE void __STRBT(uint8_t value, volatile uint8_t *ptr)
+     -:    87:{
+     -:    88:  __ASM volatile ("strbt %1, %0" : "=Q" (*ptr) : "r" ((uint32_t)value) );
+     -:    89:}
+     -:    90:
+     -:    91:
+     -:    92:/**
+     -:    93:  \brief   STRT Unprivileged (16 bit)
+     -:    94:  \details Executes a Unprivileged STRT instruction for 16 bit values.
+     -:    95:  \param [in]  value  Value to store
+     -:    96:  \param [in]    ptr  Pointer to location
+     -:    97: */
+     -:    98:__STATIC_FORCEINLINE void __STRHT(uint16_t value, volatile uint16_t *ptr)
+     -:    99:{
+     -:   100:  __ASM volatile ("strht %1, %0" : "=Q" (*ptr) : "r" ((uint32_t)value) );
+     -:   101:}
+     -:   102:
+     -:   103:
+     -:   104:/**
+     -:   105:  \brief   STRT Unprivileged (32 bit)
+     -:   106:  \details Executes a Unprivileged STRT instruction for 32 bit values.
+     -:   107:  \param [in]  value  Value to store
+     -:   108:  \param [in]    ptr  Pointer to location
+     -:   109: */
+     -:   110:__STATIC_FORCEINLINE void __STRT(uint32_t value, volatile uint32_t *ptr)
+     -:   111:{
+     -:   112:  __ASM volatile ("strt %1, %0" : "=Q" (*ptr) : "r" (value) );
+     -:   113:}
+     -:   114:#endif /* (__ARM_ARCH_ISA_THUMB >= 2) */
+     -:   115:
+     -:   116:
+     -:   117:/* ###########################  Core Function Access  ########################### */
+     -:   118:/** \ingroup  CMSIS_Core_FunctionInterface
+     -:   119:    \defgroup CMSIS_Core_RegAccFunctions CMSIS Core Register Access Functions
+     -:   120:  @{
+     -:   121: */
+     -:   122:
+     -:   123:/**
+     -:   124:  \brief   Get Control Register
+     -:   125:  \details Returns the content of the Control Register.
+     -:   126:  \return               Control Register value
+     -:   127: */
+     -:   128:__STATIC_FORCEINLINE uint32_t __get_CONTROL(void)
+     -:   129:{
+     -:   130:  uint32_t result;
+     -:   131:
+ #####:   132:  __ASM volatile ("MRS %0, control" : "=r" (result) );
+     -:   133:  return (result);
+     -:   134:}
+     -:   135:
+     -:   136:
+     -:   137:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   138:/**
+     -:   139:  \brief   Get Control Register (non-secure)
+     -:   140:  \details Returns the content of the non-secure Control Register when in secure mode.
+     -:   141:  \return               non-secure Control Register value
+     -:   142: */
+     -:   143:__STATIC_FORCEINLINE uint32_t __TZ_get_CONTROL_NS(void)
+     -:   144:{
+     -:   145:  uint32_t result;
+     -:   146:
+     -:   147:  __ASM volatile ("MRS %0, control_ns" : "=r" (result) );
+     -:   148:  return (result);
+     -:   149:}
+     -:   150:#endif
+     -:   151:
+     -:   152:
+     -:   153:/**
+     -:   154:  \brief   Set Control Register
+     -:   155:  \details Writes the given value to the Control Register.
+     -:   156:  \param [in]    control  Control Register value to set
+     -:   157: */
+     -:   158:__STATIC_FORCEINLINE void __set_CONTROL(uint32_t control)
+     -:   159:{
+ #####:   160:  __ASM volatile ("MSR control, %0" : : "r" (control) : "memory");
+ #####:   161:  __ISB();
+     -:   162:}
+     -:   163:
+     -:   164:
+     -:   165:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   166:/**
+     -:   167:  \brief   Set Control Register (non-secure)
+     -:   168:  \details Writes the given value to the non-secure Control Register when in secure state.
+     -:   169:  \param [in]    control  Control Register value to set
+     -:   170: */
+     -:   171:__STATIC_FORCEINLINE void __TZ_set_CONTROL_NS(uint32_t control)
+     -:   172:{
+     -:   173:  __ASM volatile ("MSR control_ns, %0" : : "r" (control) : "memory");
+     -:   174:  __ISB();
+     -:   175:}
+     -:   176:#endif
+     -:   177:
+     -:   178:
+     -:   179:/**
+     -:   180:  \brief   Get IPSR Register
+     -:   181:  \details Returns the content of the IPSR Register.
+     -:   182:  \return               IPSR Register value
+     -:   183: */
+     -:   184:__STATIC_FORCEINLINE uint32_t __get_IPSR(void)
+     -:   185:{
+     -:   186:  uint32_t result;
+     -:   187:
+ #####:   188:  __ASM volatile ("MRS %0, ipsr" : "=r" (result) );
+     -:   189:  return (result);
+     -:   190:}
+     -:   191:
+     -:   192:
+     -:   193:/**
+     -:   194:  \brief   Get APSR Register
+     -:   195:  \details Returns the content of the APSR Register.
+     -:   196:  \return               APSR Register value
+     -:   197: */
+     -:   198:__STATIC_FORCEINLINE uint32_t __get_APSR(void)
+     -:   199:{
+     -:   200:  uint32_t result;
+     -:   201:
+     -:   202:  __ASM volatile ("MRS %0, apsr" : "=r" (result) );
+     -:   203:  return (result);
+     -:   204:}
+     -:   205:
+     -:   206:
+     -:   207:/**
+     -:   208:  \brief   Get xPSR Register
+     -:   209:  \details Returns the content of the xPSR Register.
+     -:   210:  \return               xPSR Register value
+     -:   211: */
+     -:   212:__STATIC_FORCEINLINE uint32_t __get_xPSR(void)
+     -:   213:{
+     -:   214:  uint32_t result;
+     -:   215:
+     -:   216:  __ASM volatile ("MRS %0, xpsr" : "=r" (result) );
+     -:   217:  return (result);
+     -:   218:}
+     -:   219:
+     -:   220:
+     -:   221:/**
+     -:   222:  \brief   Get Process Stack Pointer
+     -:   223:  \details Returns the current value of the Process Stack Pointer (PSP).
+     -:   224:  \return               PSP Register value
+     -:   225: */
+     -:   226:__STATIC_FORCEINLINE uint32_t __get_PSP(void)
+     -:   227:{
+     -:   228:  uint32_t result;
+     -:   229:
+ #####:   230:  __ASM volatile ("MRS %0, psp"  : "=r" (result) );
+     -:   231:  return (result);
+     -:   232:}
+     -:   233:
+     -:   234:
+     -:   235:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   236:/**
+     -:   237:  \brief   Get Process Stack Pointer (non-secure)
+     -:   238:  \details Returns the current value of the non-secure Process Stack Pointer (PSP) when in secure state.
+     -:   239:  \return               PSP Register value
+     -:   240: */
+     -:   241:__STATIC_FORCEINLINE uint32_t __TZ_get_PSP_NS(void)
+     -:   242:{
+     -:   243:  uint32_t result;
+     -:   244:
+     -:   245:  __ASM volatile ("MRS %0, psp_ns"  : "=r" (result) );
+     -:   246:  return (result);
+     -:   247:}
+     -:   248:#endif
+     -:   249:
+     -:   250:
+     -:   251:/**
+     -:   252:  \brief   Set Process Stack Pointer
+     -:   253:  \details Assigns the given value to the Process Stack Pointer (PSP).
+     -:   254:  \param [in]    topOfProcStack  Process Stack Pointer value to set
+     -:   255: */
+     -:   256:__STATIC_FORCEINLINE void __set_PSP(uint32_t topOfProcStack)
+     -:   257:{
+     -:   258:  __ASM volatile ("MSR psp, %0" : : "r" (topOfProcStack) : );
+     -:   259:}
+     -:   260:
+     -:   261:
+     -:   262:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   263:/**
+     -:   264:  \brief   Set Process Stack Pointer (non-secure)
+     -:   265:  \details Assigns the given value to the non-secure Process Stack Pointer (PSP) when in secure state.
+     -:   266:  \param [in]    topOfProcStack  Process Stack Pointer value to set
+     -:   267: */
+     -:   268:__STATIC_FORCEINLINE void __TZ_set_PSP_NS(uint32_t topOfProcStack)
+     -:   269:{
+     -:   270:  __ASM volatile ("MSR psp_ns, %0" : : "r" (topOfProcStack) : );
+     -:   271:}
+     -:   272:#endif
+     -:   273:
+     -:   274:
+     -:   275:/**
+     -:   276:  \brief   Get Main Stack Pointer
+     -:   277:  \details Returns the current value of the Main Stack Pointer (MSP).
+     -:   278:  \return               MSP Register value
+     -:   279: */
+     -:   280:__STATIC_FORCEINLINE uint32_t __get_MSP(void)
+     -:   281:{
+     -:   282:  uint32_t result;
+     -:   283:
+     -:   284:  __ASM volatile ("MRS %0, msp" : "=r" (result) );
+     -:   285:  return (result);
+     -:   286:}
+     -:   287:
+     -:   288:
+     -:   289:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   290:/**
+     -:   291:  \brief   Get Main Stack Pointer (non-secure)
+     -:   292:  \details Returns the current value of the non-secure Main Stack Pointer (MSP) when in secure state.
+     -:   293:  \return               MSP Register value
+     -:   294: */
+     -:   295:__STATIC_FORCEINLINE uint32_t __TZ_get_MSP_NS(void)
+     -:   296:{
+     -:   297:  uint32_t result;
+     -:   298:
+     -:   299:  __ASM volatile ("MRS %0, msp_ns" : "=r" (result) );
+     -:   300:  return (result);
+     -:   301:}
+     -:   302:#endif
+     -:   303:
+     -:   304:
+     -:   305:/**
+     -:   306:  \brief   Set Main Stack Pointer
+     -:   307:  \details Assigns the given value to the Main Stack Pointer (MSP).
+     -:   308:  \param [in]    topOfMainStack  Main Stack Pointer value to set
+     -:   309: */
+     -:   310:__STATIC_FORCEINLINE void __set_MSP(uint32_t topOfMainStack)
+     -:   311:{
+     -:   312:  __ASM volatile ("MSR msp, %0" : : "r" (topOfMainStack) : );
+     -:   313:}
+     -:   314:
+     -:   315:
+     -:   316:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   317:/**
+     -:   318:  \brief   Set Main Stack Pointer (non-secure)
+     -:   319:  \details Assigns the given value to the non-secure Main Stack Pointer (MSP) when in secure state.
+     -:   320:  \param [in]    topOfMainStack  Main Stack Pointer value to set
+     -:   321: */
+     -:   322:__STATIC_FORCEINLINE void __TZ_set_MSP_NS(uint32_t topOfMainStack)
+     -:   323:{
+     -:   324:  __ASM volatile ("MSR msp_ns, %0" : : "r" (topOfMainStack) : );
+     -:   325:}
+     -:   326:#endif
+     -:   327:
+     -:   328:
+     -:   329:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   330:/**
+     -:   331:  \brief   Get Stack Pointer (non-secure)
+     -:   332:  \details Returns the current value of the non-secure Stack Pointer (SP) when in secure state.
+     -:   333:  \return               SP Register value
+     -:   334: */
+     -:   335:__STATIC_FORCEINLINE uint32_t __TZ_get_SP_NS(void)
+     -:   336:{
+     -:   337:  uint32_t result;
+     -:   338:
+     -:   339:  __ASM volatile ("MRS %0, sp_ns" : "=r" (result) );
+     -:   340:  return (result);
+     -:   341:}
+     -:   342:
+     -:   343:
+     -:   344:/**
+     -:   345:  \brief   Set Stack Pointer (non-secure)
+     -:   346:  \details Assigns the given value to the non-secure Stack Pointer (SP) when in secure state.
+     -:   347:  \param [in]    topOfStack  Stack Pointer value to set
+     -:   348: */
+     -:   349:__STATIC_FORCEINLINE void __TZ_set_SP_NS(uint32_t topOfStack)
+     -:   350:{
+     -:   351:  __ASM volatile ("MSR sp_ns, %0" : : "r" (topOfStack) : );
+     -:   352:}
+     -:   353:#endif
+     -:   354:
+     -:   355:
+     -:   356:/**
+     -:   357:  \brief   Get Priority Mask
+     -:   358:  \details Returns the current state of the priority mask bit from the Priority Mask Register.
+     -:   359:  \return               Priority Mask value
+     -:   360: */
+     -:   361:__STATIC_FORCEINLINE uint32_t __get_PRIMASK(void)
+     -:   362:{
+     -:   363:  uint32_t result;
+     -:   364:
+ #####:   365:  __ASM volatile ("MRS %0, primask" : "=r" (result) );
+     -:   366:  return (result);
+     -:   367:}
+     -:   368:
+     -:   369:
+     -:   370:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   371:/**
+     -:   372:  \brief   Get Priority Mask (non-secure)
+     -:   373:  \details Returns the current state of the non-secure priority mask bit from the Priority Mask Register when in secure state.
+     -:   374:  \return               Priority Mask value
+     -:   375: */
+     -:   376:__STATIC_FORCEINLINE uint32_t __TZ_get_PRIMASK_NS(void)
+     -:   377:{
+     -:   378:  uint32_t result;
+     -:   379:
+     -:   380:  __ASM volatile ("MRS %0, primask_ns" : "=r" (result) );
+     -:   381:  return (result);
+     -:   382:}
+     -:   383:#endif
+     -:   384:
+     -:   385:
+     -:   386:/**
+     -:   387:  \brief   Set Priority Mask
+     -:   388:  \details Assigns the given value to the Priority Mask Register.
+     -:   389:  \param [in]    priMask  Priority Mask
+     -:   390: */
+     -:   391:__STATIC_FORCEINLINE void __set_PRIMASK(uint32_t priMask)
+     -:   392:{
+     -:   393:  __ASM volatile ("MSR primask, %0" : : "r" (priMask) : "memory");
+     -:   394:}
+     -:   395:
+     -:   396:
+     -:   397:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   398:/**
+     -:   399:  \brief   Set Priority Mask (non-secure)
+     -:   400:  \details Assigns the given value to the non-secure Priority Mask Register when in secure state.
+     -:   401:  \param [in]    priMask  Priority Mask
+     -:   402: */
+     -:   403:__STATIC_FORCEINLINE void __TZ_set_PRIMASK_NS(uint32_t priMask)
+     -:   404:{
+     -:   405:  __ASM volatile ("MSR primask_ns, %0" : : "r" (priMask) : "memory");
+     -:   406:}
+     -:   407:#endif
+     -:   408:
+     -:   409:
+     -:   410:#if (__ARM_ARCH_ISA_THUMB >= 2)
+     -:   411:/**
+     -:   412:  \brief   Get Base Priority
+     -:   413:  \details Returns the current value of the Base Priority register.
+     -:   414:  \return               Base Priority register value
+     -:   415: */
+     -:   416:__STATIC_FORCEINLINE uint32_t __get_BASEPRI(void)
+     -:   417:{
+     -:   418:  uint32_t result;
+     -:   419:
+ #####:   420:  __ASM volatile ("MRS %0, basepri" : "=r" (result) );
+     -:   421:  return (result);
+     -:   422:}
+     -:   423:
+     -:   424:
+     -:   425:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   426:/**
+     -:   427:  \brief   Get Base Priority (non-secure)
+     -:   428:  \details Returns the current value of the non-secure Base Priority register when in secure state.
+     -:   429:  \return               Base Priority register value
+     -:   430: */
+     -:   431:__STATIC_FORCEINLINE uint32_t __TZ_get_BASEPRI_NS(void)
+     -:   432:{
+     -:   433:  uint32_t result;
+     -:   434:
+     -:   435:  __ASM volatile ("MRS %0, basepri_ns" : "=r" (result) );
+     -:   436:  return (result);
+     -:   437:}
+     -:   438:#endif
+     -:   439:
+     -:   440:
+     -:   441:/**
+     -:   442:  \brief   Set Base Priority
+     -:   443:  \details Assigns the given value to the Base Priority register.
+     -:   444:  \param [in]    basePri  Base Priority value to set
+     -:   445: */
+     -:   446:__STATIC_FORCEINLINE void __set_BASEPRI(uint32_t basePri)
+     -:   447:{
+     -:   448:  __ASM volatile ("MSR basepri, %0" : : "r" (basePri) : "memory");
+     -:   449:}
+     -:   450:
+     -:   451:
+     -:   452:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   453:/**
+     -:   454:  \brief   Set Base Priority (non-secure)
+     -:   455:  \details Assigns the given value to the non-secure Base Priority register when in secure state.
+     -:   456:  \param [in]    basePri  Base Priority value to set
+     -:   457: */
+     -:   458:__STATIC_FORCEINLINE void __TZ_set_BASEPRI_NS(uint32_t basePri)
+     -:   459:{
+     -:   460:  __ASM volatile ("MSR basepri_ns, %0" : : "r" (basePri) : "memory");
+     -:   461:}
+     -:   462:#endif
+     -:   463:
+     -:   464:
+     -:   465:/**
+     -:   466:  \brief   Set Base Priority with condition
+     -:   467:  \details Assigns the given value to the Base Priority register only if BASEPRI masking is disabled,
+     -:   468:           or the new value increases the BASEPRI priority level.
+     -:   469:  \param [in]    basePri  Base Priority value to set
+     -:   470: */
+     -:   471:__STATIC_FORCEINLINE void __set_BASEPRI_MAX(uint32_t basePri)
+     -:   472:{
+     -:   473:  __ASM volatile ("MSR basepri_max, %0" : : "r" (basePri) : "memory");
+     -:   474:}
+     -:   475:
+     -:   476:
+     -:   477:/**
+     -:   478:  \brief   Get Fault Mask
+     -:   479:  \details Returns the current value of the Fault Mask register.
+     -:   480:  \return               Fault Mask register value
+     -:   481: */
+     -:   482:__STATIC_FORCEINLINE uint32_t __get_FAULTMASK(void)
+     -:   483:{
+     -:   484:  uint32_t result;
+     -:   485:
+     -:   486:  __ASM volatile ("MRS %0, faultmask" : "=r" (result) );
+     -:   487:  return (result);
+     -:   488:}
+     -:   489:
+     -:   490:
+     -:   491:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   492:/**
+     -:   493:  \brief   Get Fault Mask (non-secure)
+     -:   494:  \details Returns the current value of the non-secure Fault Mask register when in secure state.
+     -:   495:  \return               Fault Mask register value
+     -:   496: */
+     -:   497:__STATIC_FORCEINLINE uint32_t __TZ_get_FAULTMASK_NS(void)
+     -:   498:{
+     -:   499:  uint32_t result;
+     -:   500:
+     -:   501:  __ASM volatile ("MRS %0, faultmask_ns" : "=r" (result) );
+     -:   502:  return (result);
+     -:   503:}
+     -:   504:#endif
+     -:   505:
+     -:   506:
+     -:   507:/**
+     -:   508:  \brief   Set Fault Mask
+     -:   509:  \details Assigns the given value to the Fault Mask register.
+     -:   510:  \param [in]    faultMask  Fault Mask value to set
+     -:   511: */
+     -:   512:__STATIC_FORCEINLINE void __set_FAULTMASK(uint32_t faultMask)
+     -:   513:{
+     -:   514:  __ASM volatile ("MSR faultmask, %0" : : "r" (faultMask) : "memory");
+     -:   515:}
+     -:   516:
+     -:   517:
+     -:   518:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   519:/**
+     -:   520:  \brief   Set Fault Mask (non-secure)
+     -:   521:  \details Assigns the given value to the non-secure Fault Mask register when in secure state.
+     -:   522:  \param [in]    faultMask  Fault Mask value to set
+     -:   523: */
+     -:   524:__STATIC_FORCEINLINE void __TZ_set_FAULTMASK_NS(uint32_t faultMask)
+     -:   525:{
+     -:   526:  __ASM volatile ("MSR faultmask_ns, %0" : : "r" (faultMask) : "memory");
+     -:   527:}
+     -:   528:#endif
+     -:   529:
+     -:   530:#endif /* (__ARM_ARCH_ISA_THUMB >= 2) */
+     -:   531:
+     -:   532:
+     -:   533:#if (__ARM_ARCH >= 8)
+     -:   534:/**
+     -:   535:  \brief   Get Process Stack Pointer Limit
+     -:   536:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   537:  Stack Pointer Limit register hence zero is returned always in non-secure
+     -:   538:  mode.
+     -:   539:
+     -:   540:  \details Returns the current value of the Process Stack Pointer Limit (PSPLIM).
+     -:   541:  \return               PSPLIM Register value
+     -:   542: */
+     -:   543:__STATIC_FORCEINLINE uint32_t __get_PSPLIM(void)
+     -:   544:{
+     -:   545:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   546:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)) && \
+     -:   547:     (!defined (__ARM_FEATURE_CMSE  ) || (__ARM_FEATURE_CMSE   < 3)))
+     -:   548:  /* without main extensions, the non-secure PSPLIM is RAZ/WI */
+     -:   549:  return (0U);
+     -:   550:#else
+     -:   551:  uint32_t result;
+     -:   552:  __ASM volatile ("MRS %0, psplim"  : "=r" (result) );
+     -:   553:  return (result);
+     -:   554:#endif
+     -:   555:}
+     -:   556:
+     -:   557:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   558:/**
+     -:   559:  \brief   Get Process Stack Pointer Limit (non-secure)
+     -:   560:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   561:  Stack Pointer Limit register hence zero is returned always.
+     -:   562:
+     -:   563:  \details Returns the current value of the non-secure Process Stack Pointer Limit (PSPLIM) when in secure state.
+     -:   564:  \return               PSPLIM Register value
+     -:   565: */
+     -:   566:__STATIC_FORCEINLINE uint32_t __TZ_get_PSPLIM_NS(void)
+     -:   567:{
+     -:   568:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   569:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)))
+     -:   570:  /* without main extensions, the non-secure PSPLIM is RAZ/WI */
+     -:   571:  return (0U);
+     -:   572:#else
+     -:   573:  uint32_t result;
+     -:   574:  __ASM volatile ("MRS %0, psplim_ns"  : "=r" (result) );
+     -:   575:  return (result);
+     -:   576:#endif
+     -:   577:}
+     -:   578:#endif
+     -:   579:
+     -:   580:
+     -:   581:/**
+     -:   582:  \brief   Set Process Stack Pointer Limit
+     -:   583:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   584:  Stack Pointer Limit register hence the write is silently ignored in non-secure
+     -:   585:  mode.
+     -:   586:
+     -:   587:  \details Assigns the given value to the Process Stack Pointer Limit (PSPLIM).
+     -:   588:  \param [in]    ProcStackPtrLimit  Process Stack Pointer Limit value to set
+     -:   589: */
+     -:   590:__STATIC_FORCEINLINE void __set_PSPLIM(uint32_t ProcStackPtrLimit)
+     -:   591:{
+     -:   592:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   593:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)) && \
+     -:   594:     (!defined (__ARM_FEATURE_CMSE  ) || (__ARM_FEATURE_CMSE   < 3)))
+     -:   595:  /* without main extensions, the non-secure PSPLIM is RAZ/WI */
+     -:   596:  (void)ProcStackPtrLimit;
+     -:   597:#else
+     -:   598:  __ASM volatile ("MSR psplim, %0" : : "r" (ProcStackPtrLimit));
+     -:   599:#endif
+     -:   600:}
+     -:   601:
+     -:   602:
+     -:   603:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   604:/**
+     -:   605:  \brief   Set Process Stack Pointer (non-secure)
+     -:   606:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   607:  Stack Pointer Limit register hence the write is silently ignored.
+     -:   608:
+     -:   609:  \details Assigns the given value to the non-secure Process Stack Pointer Limit (PSPLIM) when in secure state.
+     -:   610:  \param [in]    ProcStackPtrLimit  Process Stack Pointer Limit value to set
+     -:   611: */
+     -:   612:__STATIC_FORCEINLINE void __TZ_set_PSPLIM_NS(uint32_t ProcStackPtrLimit)
+     -:   613:{
+     -:   614:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   615:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)))
+     -:   616:  /* without main extensions, the non-secure PSPLIM is RAZ/WI */
+     -:   617:  (void)ProcStackPtrLimit;
+     -:   618:#else
+     -:   619:  __ASM volatile ("MSR psplim_ns, %0\n" : : "r" (ProcStackPtrLimit));
+     -:   620:#endif
+     -:   621:}
+     -:   622:#endif
+     -:   623:
+     -:   624:
+     -:   625:/**
+     -:   626:  \brief   Get Main Stack Pointer Limit
+     -:   627:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   628:  Stack Pointer Limit register hence zero is returned always.
+     -:   629:
+     -:   630:  \details Returns the current value of the Main Stack Pointer Limit (MSPLIM).
+     -:   631:  \return               MSPLIM Register value
+     -:   632: */
+     -:   633:__STATIC_FORCEINLINE uint32_t __get_MSPLIM(void)
+     -:   634:{
+     -:   635:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   636:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)) && \
+     -:   637:     (!defined (__ARM_FEATURE_CMSE  ) || (__ARM_FEATURE_CMSE   < 3)))
+     -:   638:  /* without main extensions, the non-secure MSPLIM is RAZ/WI */
+     -:   639:  return (0U);
+     -:   640:#else
+     -:   641:  uint32_t result;
+     -:   642:  __ASM volatile ("MRS %0, msplim" : "=r" (result) );
+     -:   643:  return (result);
+     -:   644:#endif
+     -:   645:}
+     -:   646:
+     -:   647:
+     -:   648:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   649:/**
+     -:   650:  \brief   Get Main Stack Pointer Limit (non-secure)
+     -:   651:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   652:  Stack Pointer Limit register hence zero is returned always.
+     -:   653:
+     -:   654:  \details Returns the current value of the non-secure Main Stack Pointer Limit(MSPLIM) when in secure state.
+     -:   655:  \return               MSPLIM Register value
+     -:   656: */
+     -:   657:__STATIC_FORCEINLINE uint32_t __TZ_get_MSPLIM_NS(void)
+     -:   658:{
+     -:   659:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   660:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)))
+     -:   661:  /* without main extensions, the non-secure MSPLIM is RAZ/WI */
+     -:   662:  return (0U);
+     -:   663:#else
+     -:   664:  uint32_t result;
+     -:   665:  __ASM volatile ("MRS %0, msplim_ns" : "=r" (result) );
+     -:   666:  return (result);
+     -:   667:#endif
+     -:   668:}
+     -:   669:#endif
+     -:   670:
+     -:   671:
+     -:   672:/**
+     -:   673:  \brief   Set Main Stack Pointer Limit
+     -:   674:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   675:  Stack Pointer Limit register hence the write is silently ignored.
+     -:   676:
+     -:   677:  \details Assigns the given value to the Main Stack Pointer Limit (MSPLIM).
+     -:   678:  \param [in]    MainStackPtrLimit  Main Stack Pointer Limit value to set
+     -:   679: */
+     -:   680:__STATIC_FORCEINLINE void __set_MSPLIM(uint32_t MainStackPtrLimit)
+     -:   681:{
+     -:   682:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   683:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)) && \
+     -:   684:     (!defined (__ARM_FEATURE_CMSE  ) || (__ARM_FEATURE_CMSE   < 3)))
+     -:   685:  /* without main extensions, the non-secure MSPLIM is RAZ/WI */
+     -:   686:  (void)MainStackPtrLimit;
+     -:   687:#else
+     -:   688:  __ASM volatile ("MSR msplim, %0" : : "r" (MainStackPtrLimit));
+     -:   689:#endif
+     -:   690:}
+     -:   691:
+     -:   692:
+     -:   693:#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
+     -:   694:/**
+     -:   695:  \brief   Set Main Stack Pointer Limit (non-secure)
+     -:   696:  Devices without ARMv8-M Main Extensions (i.e. Cortex-M23) lack the non-secure
+     -:   697:  Stack Pointer Limit register hence the write is silently ignored.
+     -:   698:
+     -:   699:  \details Assigns the given value to the non-secure Main Stack Pointer Limit (MSPLIM) when in secure state.
+     -:   700:  \param [in]    MainStackPtrLimit  Main Stack Pointer value to set
+     -:   701: */
+     -:   702:__STATIC_FORCEINLINE void __TZ_set_MSPLIM_NS(uint32_t MainStackPtrLimit)
+     -:   703:{
+     -:   704:#if (!(defined (__ARM_ARCH_8M_MAIN__ ) && (__ARM_ARCH_8M_MAIN__ == 1)) && \
+     -:   705:     !(defined (__ARM_ARCH_8_1M_MAIN__ ) && (__ARM_ARCH_8_1M_MAIN__ == 1)))
+     -:   706:  /* without main extensions, the non-secure MSPLIM is RAZ/WI */
+     -:   707:  (void)MainStackPtrLimit;
+     -:   708:#else
+     -:   709:  __ASM volatile ("MSR msplim_ns, %0" : : "r" (MainStackPtrLimit));
+     -:   710:#endif
+     -:   711:}
+     -:   712:#endif
+     -:   713:
+     -:   714:#endif /* (__ARM_ARCH >= 8) */
+     -:   715:/** @} end of CMSIS_Core_RegAccFunctions */
+     -:   716:
+     -:   717:
+     -:   718:/* ###################  Compiler specific Intrinsics  ########################### */
+     -:   719:/** \defgroup CMSIS_SIMD_intrinsics CMSIS SIMD Intrinsics
+     -:   720:  Access to dedicated SIMD instructions
+     -:   721:  @{
+     -:   722:*/
+     -:   723:
+     -:   724:#if (defined (__ARM_FEATURE_DSP) && (__ARM_FEATURE_DSP == 1))
+     -:   725:#define     __SADD8                 __sadd8
+     -:   726:#define     __QADD8                 __qadd8
+     -:   727:#define     __SHADD8                __shadd8
+     -:   728:#define     __UADD8                 __uadd8
+     -:   729:#define     __UQADD8                __uqadd8
+     -:   730:#define     __UHADD8                __uhadd8
+     -:   731:#define     __SSUB8                 __ssub8
+     -:   732:#define     __QSUB8                 __qsub8
+     -:   733:#define     __SHSUB8                __shsub8
+     -:   734:#define     __USUB8                 __usub8
+     -:   735:#define     __UQSUB8                __uqsub8
+     -:   736:#define     __UHSUB8                __uhsub8
+     -:   737:#define     __SADD16                __sadd16
+     -:   738:#define     __QADD16                __qadd16
+     -:   739:#define     __SHADD16               __shadd16
+     -:   740:#define     __UADD16                __uadd16
+     -:   741:#define     __UQADD16               __uqadd16
+     -:   742:#define     __UHADD16               __uhadd16
+     -:   743:#define     __SSUB16                __ssub16
+     -:   744:#define     __QSUB16                __qsub16
+     -:   745:#define     __SHSUB16               __shsub16
+     -:   746:#define     __USUB16                __usub16
+     -:   747:#define     __UQSUB16               __uqsub16
+     -:   748:#define     __UHSUB16               __uhsub16
+     -:   749:#define     __SASX                  __sasx
+     -:   750:#define     __QASX                  __qasx
+     -:   751:#define     __SHASX                 __shasx
+     -:   752:#define     __UASX                  __uasx
+     -:   753:#define     __UQASX                 __uqasx
+     -:   754:#define     __UHASX                 __uhasx
+     -:   755:#define     __SSAX                  __ssax
+     -:   756:#define     __QSAX                  __qsax
+     -:   757:#define     __SHSAX                 __shsax
+     -:   758:#define     __USAX                  __usax
+     -:   759:#define     __UQSAX                 __uqsax
+     -:   760:#define     __UHSAX                 __uhsax
+     -:   761:#define     __USAD8                 __usad8
+     -:   762:#define     __USADA8                __usada8
+     -:   763:#define     __SSAT16                __ssat16
+     -:   764:#define     __USAT16                __usat16
+     -:   765:#define     __UXTB16                __uxtb16
+     -:   766:#define     __UXTAB16               __uxtab16
+     -:   767:#define     __SXTB16                __sxtb16
+     -:   768:#define     __SXTAB16               __sxtab16
+     -:   769:#define     __SMUAD                 __smuad
+     -:   770:#define     __SMUADX                __smuadx
+     -:   771:#define     __SMLAD                 __smlad
+     -:   772:#define     __SMLADX                __smladx
+     -:   773:#define     __SMLALD                __smlald
+     -:   774:#define     __SMLALDX               __smlaldx
+     -:   775:#define     __SMUSD                 __smusd
+     -:   776:#define     __SMUSDX                __smusdx
+     -:   777:#define     __SMLSD                 __smlsd
+     -:   778:#define     __SMLSDX                __smlsdx
+     -:   779:#define     __SMLSLD                __smlsld
+     -:   780:#define     __SMLSLDX               __smlsldx
+     -:   781:#define     __SEL                   __sel
+     -:   782:#define     __QADD                  __qadd
+     -:   783:#define     __QSUB                  __qsub
+     -:   784:
+     -:   785:#define __PKHBT(ARG1,ARG2,ARG3) \
+     -:   786:__extension__ \
+     -:   787:({                          \
+     -:   788:  uint32_t __RES, __ARG1 = (ARG1), __ARG2 = (ARG2); \
+     -:   789:  __ASM ("pkhbt %0, %1, %2, lsl %3" : "=r" (__RES) :  "r" (__ARG1), "r" (__ARG2), "I" (ARG3)  ); \
+     -:   790:  __RES; \
+     -:   791: })
+     -:   792:
+     -:   793:#define __PKHTB(ARG1,ARG2,ARG3) \
+     -:   794:__extension__ \
+     -:   795:({                          \
+     -:   796:  uint32_t __RES, __ARG1 = (ARG1), __ARG2 = (ARG2); \
+     -:   797:  if (ARG3 == 0) \
+     -:   798:    __ASM ("pkhtb %0, %1, %2" : "=r" (__RES) :  "r" (__ARG1), "r" (__ARG2)  ); \
+     -:   799:  else \
+     -:   800:    __ASM ("pkhtb %0, %1, %2, asr %3" : "=r" (__RES) :  "r" (__ARG1), "r" (__ARG2), "I" (ARG3)  ); \
+     -:   801:  __RES; \
+     -:   802: })
+     -:   803:
+     -:   804:#define __SXTB16_RORn(ARG1, ARG2)        __SXTB16(__ROR(ARG1, ARG2))
+     -:   805:
+     -:   806:#define __SXTAB16_RORn(ARG1, ARG2, ARG3) __SXTAB16(ARG1, __ROR(ARG2, ARG3))
+     -:   807:
+     -:   808:__STATIC_FORCEINLINE int32_t __SMMLA (int32_t op1, int32_t op2, int32_t op3)
+     -:   809:{
+     -:   810:  int32_t result;
+     -:   811:
+     -:   812:  __ASM volatile ("smmla %0, %1, %2, %3" : "=r" (result): "r"  (op1), "r" (op2), "r" (op3) );
+     -:   813:  return (result);
+     -:   814:}
+     -:   815:#endif /* (defined (__ARM_FEATURE_DSP) && (__ARM_FEATURE_DSP == 1)) */
+     -:   816:/** @} end of group CMSIS_SIMD_intrinsics */
+     -:   817:
+     -:   818:
+     -:   819:#endif /* __CMSIS_ARMCLANG_M_H */

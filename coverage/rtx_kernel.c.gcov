@@ -1,0 +1,976 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_kernel.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       Kernel functions
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#include "rtx_lib.h"
+     -:    27:
+     -:    28:
+     -:    29://  OS Runtime Information
+     -:    30:osRtxInfo_t osRtxInfo __attribute__((section(".data.os"))) =
+     -:    31://lint -e{785} "Initialize only OS ID, OS Version and Kernel State"
+     -:    32:{ .os_id = osRtxKernelId, .version = osRtxVersionKernel, .kernel.state = osRtxKernelInactive };
+     -:    33:
+     -:    34:
+     -:    35://  ==== Helper functions ====
+     -:    36:
+     -:    37:/// Block Kernel (disable: thread switching, time tick, post ISR processing).
+     -:    38:static void KernelBlock (void) {
+     -:    39:
+     -:    40:  OS_Tick_Disable();
+     -:    41:
+     -:    42:  osRtxInfo.kernel.blocked = 1U;
+     -:    43:  __DSB();
+     -:    44:
+     -:    45:  if (GetPendSV() != 0U) {
+     -:    46:    ClrPendSV();
+     -:    47:    osRtxInfo.kernel.pendSV = 1U;
+     -:    48:  }
+     -:    49:}
+     -:    50:
+     -:    51:/// Unblock Kernel
+     -:    52:static void KernelUnblock (void) {
+     -:    53:
+ #####:    54:  osRtxInfo.kernel.blocked = 0U;
+     -:    55:  __DSB();
+     -:    56:
+     -:    57:  if (osRtxInfo.kernel.pendSV != 0U) {
+ #####:    58:    osRtxInfo.kernel.pendSV = 0U;
+     -:    59:    SetPendSV();
+     -:    60:  }
+     -:    61:
+     -:    62:  OS_Tick_Enable();
+     -:    63:}
+     -:    64:
+     -:    65:// Get Kernel sleep time
+     -:    66:static uint32_t GetKernelSleepTime (void) {
+     -:    67:  const os_thread_t *thread;
+     -:    68:  const os_timer_t  *timer;
+     -:    69:  uint32_t           delay;
+     -:    70:
+     -:    71:  delay = osWaitForever;
+     -:    72:
+     -:    73:  // Check Thread Delay list
+     -:    74:  thread = osRtxInfo.thread.delay_list;
+     -:    75:  if (thread != NULL) {
+     -:    76:    delay = thread->delay;
+     -:    77:  }
+     -:    78:
+     -:    79:#ifdef RTX_THREAD_WATCHDOG
+     -:    80:  // Check Thread Watchdog list
+     -:    81:  thread = osRtxInfo.thread.wdog_list;
+     -:    82:  if (thread != NULL) {
+     -:    83:    if (thread->wdog_tick < delay) {
+     -:    84:      delay = thread->wdog_tick;
+     -:    85:    }
+     -:    86:  }
+     -:    87:#endif
+     -:    88:
+     -:    89:  // Check Active Timer list
+     -:    90:  timer = osRtxInfo.timer.list;
+     -:    91:  if (timer != NULL) {
+     -:    92:    if (timer->tick < delay) {
+     -:    93:      delay = timer->tick;
+     -:    94:    }
+     -:    95:  }
+     -:    96:
+     -:    97:  return delay;
+     -:    98:}
+     -:    99:
+     -:   100:
+     -:   101://  ==== Service Calls ====
+     -:   102:
+     -:   103:/// Initialize the RTOS Kernel.
+     -:   104:/// \note API identical to osKernelInitialize
+     2:   105:static osStatus_t svcRtxKernelInitialize (void) {
+     -:   106:
+     2:   107:  if (osRtxInfo.kernel.state == osRtxKernelReady) {
+     -:   108:    EvrRtxKernelInitialized();
+     -:   109:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   110:    return osOK;
+     -:   111:  }
+     -:   112:  if (osRtxInfo.kernel.state != osRtxKernelInactive) {
+ #####:   113:    EvrRtxKernelError((int32_t)osError);
+     -:   114:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   115:    return osError;
+     -:   116:  }
+     -:   117:
+     -:   118:#ifdef RTX_TZ_CONTEXT
+     -:   119:  // Initialize Secure Process Stack
+     -:   120:  if (TZ_InitContextSystem_S() == 0U) {
+     -:   121:    EvrRtxKernelError(osRtxErrorTZ_InitContext_S);
+     -:   122:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   123:    return osError;
+     -:   124:  }
+     -:   125:#endif
+     -:   126:
+     -:   127:  // Initialize osRtxInfo
+     1:   128:  (void)memset(&osRtxInfo.kernel, 0, sizeof(osRtxInfo) - offsetof(osRtxInfo_t, kernel));
+     -:   129:
+     1:   130:  osRtxInfo.isr_queue.data = osRtxConfig.isr_queue.data;
+     1:   131:  osRtxInfo.isr_queue.max  = osRtxConfig.isr_queue.max;
+     -:   132:
+     1:   133:  osRtxInfo.thread.robin.timeout = osRtxConfig.robin_timeout;
+     -:   134:
+     -:   135:  // Initialize Memory Pools (Variable Block Size)
+     1:   136:  if (osRtxMemoryInit(osRtxConfig.mem.common_addr, osRtxConfig.mem.common_size) != 0U) {
+     1:   137:    osRtxInfo.mem.common = osRtxConfig.mem.common_addr;
+     -:   138:  }
+     1:   139:  if (osRtxMemoryInit(osRtxConfig.mem.stack_addr, osRtxConfig.mem.stack_size) != 0U) {
+     -:   140:    osRtxInfo.mem.stack = osRtxConfig.mem.stack_addr;
+     -:   141:  } else {
+     -:   142:    osRtxInfo.mem.stack = osRtxInfo.mem.common;
+     -:   143:  }
+     1:   144:  if (osRtxMemoryInit(osRtxConfig.mem.mp_data_addr, osRtxConfig.mem.mp_data_size) != 0U) {
+     -:   145:    osRtxInfo.mem.mp_data = osRtxConfig.mem.mp_data_addr;
+     -:   146:  } else {
+     -:   147:    osRtxInfo.mem.mp_data = osRtxInfo.mem.common;
+     -:   148:  }
+     1:   149:  if (osRtxMemoryInit(osRtxConfig.mem.mq_data_addr, osRtxConfig.mem.mq_data_size) != 0U) {
+     -:   150:    osRtxInfo.mem.mq_data = osRtxConfig.mem.mq_data_addr;
+     -:   151:  } else {
+     -:   152:    osRtxInfo.mem.mq_data = osRtxInfo.mem.common;
+     -:   153:  }
+     -:   154:
+     -:   155:  // Initialize Memory Pools (Fixed Block Size)
+     1:   156:  if (osRtxConfig.mpi.stack != NULL) {
+ #####:   157:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.stack,
+ #####:   158:                              osRtxConfig.mpi.stack->max_blocks,
+ #####:   159:                              osRtxConfig.mpi.stack->block_size,
+     -:   160:                              osRtxConfig.mpi.stack->block_base);
+ #####:   161:    osRtxInfo.mpi.stack = osRtxConfig.mpi.stack;
+     -:   162:  }
+     1:   163:  if (osRtxConfig.mpi.thread != NULL) {
+ #####:   164:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.thread,
+ #####:   165:                              osRtxConfig.mpi.thread->max_blocks,
+ #####:   166:                              osRtxConfig.mpi.thread->block_size,
+     -:   167:                              osRtxConfig.mpi.thread->block_base);
+ #####:   168:    osRtxInfo.mpi.thread = osRtxConfig.mpi.thread;
+     -:   169:  }
+     1:   170:  if (osRtxConfig.mpi.timer != NULL) {
+ #####:   171:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.timer,
+ #####:   172:                              osRtxConfig.mpi.timer->max_blocks,
+ #####:   173:                              osRtxConfig.mpi.timer->block_size,
+     -:   174:                              osRtxConfig.mpi.timer->block_base);
+ #####:   175:    osRtxInfo.mpi.timer = osRtxConfig.mpi.timer;
+     -:   176:  }
+     1:   177:  if (osRtxConfig.mpi.event_flags != NULL) {
+ #####:   178:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.event_flags,
+ #####:   179:                              osRtxConfig.mpi.event_flags->max_blocks,
+ #####:   180:                              osRtxConfig.mpi.event_flags->block_size,
+     -:   181:                              osRtxConfig.mpi.event_flags->block_base);
+ #####:   182:    osRtxInfo.mpi.event_flags = osRtxConfig.mpi.event_flags;
+     -:   183:  }
+     1:   184:  if (osRtxConfig.mpi.mutex != NULL) {
+ #####:   185:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.mutex,
+ #####:   186:                              osRtxConfig.mpi.mutex->max_blocks,
+ #####:   187:                              osRtxConfig.mpi.mutex->block_size,
+     -:   188:                              osRtxConfig.mpi.mutex->block_base);
+ #####:   189:    osRtxInfo.mpi.mutex = osRtxConfig.mpi.mutex;
+     -:   190:  }
+     1:   191:  if (osRtxConfig.mpi.semaphore != NULL) {
+ #####:   192:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.semaphore,
+ #####:   193:                              osRtxConfig.mpi.semaphore->max_blocks,
+ #####:   194:                              osRtxConfig.mpi.semaphore->block_size,
+     -:   195:                              osRtxConfig.mpi.semaphore->block_base);
+ #####:   196:    osRtxInfo.mpi.semaphore = osRtxConfig.mpi.semaphore;
+     -:   197:  }
+     1:   198:  if (osRtxConfig.mpi.memory_pool != NULL) {
+ #####:   199:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.memory_pool,
+ #####:   200:                              osRtxConfig.mpi.memory_pool->max_blocks,
+ #####:   201:                              osRtxConfig.mpi.memory_pool->block_size,
+     -:   202:                              osRtxConfig.mpi.memory_pool->block_base);
+ #####:   203:    osRtxInfo.mpi.memory_pool = osRtxConfig.mpi.memory_pool;
+     -:   204:  }
+     1:   205:  if (osRtxConfig.mpi.message_queue != NULL) {
+ #####:   206:    (void)osRtxMemoryPoolInit(osRtxConfig.mpi.message_queue,
+ #####:   207:                              osRtxConfig.mpi.message_queue->max_blocks,
+ #####:   208:                              osRtxConfig.mpi.message_queue->block_size,
+     -:   209:                              osRtxConfig.mpi.message_queue->block_base);
+ #####:   210:    osRtxInfo.mpi.message_queue = osRtxConfig.mpi.message_queue;
+     -:   211:  }
+     -:   212:
+     1:   213:  osRtxInfo.kernel.state = osRtxKernelReady;
+     -:   214:
+     -:   215:  EvrRtxKernelInitialized();
+     -:   216:
+     -:   217:  return osOK;
+ #####:   218:}
+     -:   219:
+     -:   220:///  Get RTOS Kernel Information.
+     -:   221:/// \note API identical to osKernelGetInfo
+     -:   222:static osStatus_t svcRtxKernelGetInfo (osVersion_t *version, char *id_buf, uint32_t id_size) {
+     -:   223:  uint32_t size;
+     -:   224:
+ #####:   225:  if (version != NULL) {
+ #####:   226:    version->api    = osRtxVersionAPI;
+     -:   227:    version->kernel = osRtxVersionKernel;
+     -:   228:  }
+     -:   229:
+ #####:   230:  if ((id_buf != NULL) && (id_size != 0U)) {
+     -:   231:    if (id_size > sizeof(osRtxKernelId)) {
+     -:   232:      size = sizeof(osRtxKernelId);
+     -:   233:    } else {
+     -:   234:      size = id_size;
+     -:   235:    }
+ #####:   236:    (void)memcpy(id_buf, osRtxKernelId, size);
+     -:   237:  }
+     -:   238:
+ #####:   239:  EvrRtxKernelInfoRetrieved(version, id_buf, id_size);
+     -:   240:
+ #####:   241:  return osOK;
+     -:   242:}
+     -:   243:
+     -:   244:/// Get the current RTOS Kernel state.
+     -:   245:/// \note API identical to osKernelGetState
+     1:   246:static osKernelState_t svcRtxKernelGetState (void) {
+     -:   247:  osKernelState_t state = osRtxKernelState();
+    18:   248:  EvrRtxKernelGetState(state);
+     1:   249:  return state;
+     -:   250:}
+     -:   251:
+     -:   252:/// Start the RTOS Kernel scheduler.
+     -:   253:/// \note API identical to osKernelStart
+     1:   254:static osStatus_t svcRtxKernelStart (void) {
+     -:   255:  os_thread_t *thread;
+     -:   256:
+     1:   257:  if (osRtxInfo.kernel.state != osRtxKernelReady) {
+ #####:   258:    EvrRtxKernelError(osRtxErrorKernelNotReady);
+     -:   259:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   260:    return osError;
+     -:   261:  }
+     -:   262:
+     -:   263:  // Thread startup (Idle and Timer Thread)
+     1:   264:  if (!osRtxThreadStartup()) {
+     -:   265:    EvrRtxKernelError((int32_t)osError);
+     -:   266:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   267:    return osError;
+     -:   268:  }
+     -:   269:
+     -:   270:  // Setup SVC and PendSV System Service Calls
+     -:   271:  SVC_Setup();
+     -:   272:
+     -:   273:  // Setup RTOS Tick
+     1:   274:  if (OS_Tick_Setup(osRtxConfig.tick_freq, OS_TICK_HANDLER) != 0) {
+     -:   275:    EvrRtxKernelError((int32_t)osError);
+     -:   276:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   277:    return osError;
+     -:   278:  }
+     1:   279:  osRtxInfo.tick_irqn = OS_Tick_GetIRQn();
+     -:   280:
+     -:   281:  // Enable RTOS Tick
+     1:   282:  OS_Tick_Enable();
+     -:   283:
+     -:   284:  // Switch to Ready Thread with highest Priority
+     1:   285:  thread = osRtxThreadListGet(&osRtxInfo.thread.ready);
+     1:   286:  osRtxThreadSwitch(thread);
+     -:   287:
+     1:   288:  osRtxInfo.kernel.state = osRtxKernelRunning;
+     -:   289:
+     1:   290:  EvrRtxKernelStarted();
+     -:   291:
+     -:   292:  return osOK;
+ #####:   293:}
+     -:   294:
+     -:   295:/// Lock the RTOS Kernel scheduler.
+     -:   296:/// \note API identical to osKernelLock
+     -:   297:static int32_t svcRtxKernelLock (void) {
+     -:   298:  int32_t lock;
+     -:   299:
+     -:   300:  switch (osRtxInfo.kernel.state) {
+     -:   301:    case osRtxKernelRunning:
+     -:   302:#ifdef RTX_SAFETY_CLASS
+     -:   303:      // Check the safety class
+     -:   304:      if ((osRtxThreadGetRunning()->attr >> osRtxAttrClass_Pos) <
+     -:   305:          (osRtxInfo.kernel.protect >> osRtxKernelProtectClass_Pos)) {
+     -:   306:        EvrRtxKernelError((int32_t)osErrorSafetyClass);
+     -:   307:        lock = (int32_t)osErrorSafetyClass;
+     -:   308:        break;
+     -:   309:      }
+     -:   310:#endif
+     -:   311:      osRtxInfo.kernel.state = osRtxKernelLocked;
+     -:   312:      EvrRtxKernelLocked(0);
+     -:   313:      lock = 0;
+     -:   314:      break;
+     -:   315:    case osRtxKernelLocked:
+     -:   316:      EvrRtxKernelLocked(1);
+     -:   317:      lock = 1;
+     -:   318:      break;
+     -:   319:    default:
+     -:   320:      EvrRtxKernelError((int32_t)osError);
+     -:   321:      lock = (int32_t)osError;
+     -:   322:      break;
+     -:   323:  }
+     -:   324:  return lock;
+     -:   325:}
+     -:   326:
+     -:   327:/// Unlock the RTOS Kernel scheduler.
+     -:   328:/// \note API identical to osKernelUnlock
+     -:   329:static int32_t svcRtxKernelUnlock (void) {
+     -:   330:  int32_t lock;
+     -:   331:
+     -:   332:  switch (osRtxInfo.kernel.state) {
+     -:   333:    case osRtxKernelRunning:
+     -:   334:      EvrRtxKernelUnlocked(0);
+     -:   335:      lock = 0;
+     -:   336:      break;
+     -:   337:    case osRtxKernelLocked:
+     -:   338:      osRtxInfo.kernel.state = osRtxKernelRunning;
+     -:   339:      EvrRtxKernelUnlocked(1);
+     -:   340:      lock = 1;
+     -:   341:      break;
+     -:   342:    default:
+     -:   343:      EvrRtxKernelError((int32_t)osError);
+     -:   344:      lock = (int32_t)osError;
+     -:   345:      break;
+     -:   346:  }
+     -:   347:  return lock;
+     -:   348:}
+     -:   349:
+     -:   350:/// Restore the RTOS Kernel scheduler lock state.
+     -:   351:/// \note API identical to osKernelRestoreLock
+     -:   352:static int32_t svcRtxKernelRestoreLock (int32_t lock) {
+     -:   353:  int32_t lock_new;
+     -:   354:
+ #####:   355:  switch (osRtxInfo.kernel.state) {
+     -:   356:    case osRtxKernelRunning:
+     -:   357:    case osRtxKernelLocked:
+     -:   358:#ifdef RTX_SAFETY_CLASS
+     -:   359:      // Check the safety class
+     -:   360:      if ((osRtxThreadGetRunning()->attr >> osRtxAttrClass_Pos) <
+     -:   361:          (osRtxInfo.kernel.protect >> osRtxKernelProtectClass_Pos)) {
+     -:   362:        EvrRtxKernelError((int32_t)osErrorSafetyClass);
+     -:   363:        lock_new = (int32_t)osErrorSafetyClass;
+     -:   364:        break;
+     -:   365:      }
+     -:   366:#endif
+ #####:   367:      switch (lock) {
+     -:   368:        case 0:
+ #####:   369:          osRtxInfo.kernel.state = osRtxKernelRunning;
+ #####:   370:          EvrRtxKernelLockRestored(0);
+     -:   371:          lock_new = 0;
+     -:   372:          break;
+     -:   373:        case 1:
+ #####:   374:          osRtxInfo.kernel.state = osRtxKernelLocked;
+ #####:   375:          EvrRtxKernelLockRestored(1);
+     -:   376:          lock_new = 1;
+     -:   377:          break;
+     -:   378:        default:
+     -:   379:          EvrRtxKernelError((int32_t)osError);
+     -:   380:          lock_new = (int32_t)osError;
+     -:   381:          break;
+     -:   382:      }
+     -:   383:      break;
+     -:   384:    default:
+     -:   385:      EvrRtxKernelError((int32_t)osError);
+     -:   386:      lock_new = (int32_t)osError;
+     -:   387:      break;
+     -:   388:  }
+ #####:   389:  return lock_new;
+     -:   390:}
+     -:   391:
+     -:   392:/// Suspend the RTOS Kernel scheduler.
+     -:   393:/// \note API identical to osKernelSuspend
+     -:   394:static uint32_t svcRtxKernelSuspend (void) {
+     -:   395:  uint32_t delay;
+     -:   396:
+     -:   397:  if (osRtxInfo.kernel.state != osRtxKernelRunning) {
+ #####:   398:    EvrRtxKernelError(osRtxErrorKernelNotRunning);
+     -:   399:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   400:    return 0U;
+     -:   401:  }
+     -:   402:
+     -:   403:#ifdef RTX_SAFETY_CLASS
+     -:   404:  // Check the safety class
+     -:   405:  if ((osRtxThreadGetRunning()->attr >> osRtxAttrClass_Pos) <
+     -:   406:      (osRtxInfo.kernel.protect >> osRtxKernelProtectClass_Pos)) {
+     -:   407:    EvrRtxKernelError((int32_t)osErrorSafetyClass);
+     -:   408:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   409:    return 0U;
+     -:   410:  }
+     -:   411:#endif
+     -:   412:
+     -:   413:  KernelBlock();
+     -:   414:
+     -:   415:  osRtxInfo.kernel.state = osRtxKernelSuspended;
+     -:   416:
+     -:   417:  delay = GetKernelSleepTime();
+     -:   418:
+     -:   419:  EvrRtxKernelSuspended(delay);
+     -:   420:
+     -:   421:  return delay;
+ #####:   422:}
+     -:   423:
+     -:   424:/// Resume the RTOS Kernel scheduler.
+     -:   425:/// \note API identical to osKernelResume
+     -:   426:static void svcRtxKernelResume (uint32_t sleep_ticks) {
+     -:   427:  os_thread_t *thread;
+     -:   428:  os_timer_t  *timer;
+     -:   429:  uint32_t     delay;
+     -:   430:  uint32_t     ticks, kernel_tick;
+     -:   431:
+     -:   432:  if (osRtxInfo.kernel.state != osRtxKernelSuspended) {
+     -:   433:    EvrRtxKernelResumed();
+     -:   434:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   435:    return;
+     -:   436:  }
+     -:   437:
+     -:   438:  delay = GetKernelSleepTime();
+     -:   439:  if (sleep_ticks >= delay) {
+     -:   440:    ticks = delay - 1U;
+     -:   441:  } else {
+     -:   442:    ticks = sleep_ticks;
+     -:   443:  }
+     -:   444:
+     -:   445:  // Update Thread Delay sleep ticks
+     -:   446:  thread = osRtxInfo.thread.delay_list;
+     -:   447:  if (thread != NULL) {
+     -:   448:    thread->delay -= ticks;
+     -:   449:  }
+     -:   450:
+     -:   451:  // Update Timer sleep ticks
+     -:   452:  timer = osRtxInfo.timer.list;
+     -:   453:  if (timer != NULL) {
+     -:   454:    timer->tick -= ticks;
+     -:   455:  }
+     -:   456:
+     -:   457:#ifdef RTX_THREAD_WATCHDOG
+     -:   458:  // Update Thread Watchdog sleep ticks
+     -:   459:  thread = osRtxInfo.thread.wdog_list;
+     -:   460:  if (thread != NULL) {
+     -:   461:    thread->wdog_tick -= ticks;
+     -:   462:  }
+     -:   463:#endif
+     -:   464:
+     -:   465:  kernel_tick = osRtxInfo.kernel.tick + sleep_ticks;
+     -:   466:  osRtxInfo.kernel.tick += ticks;
+     -:   467:
+ #####:   468:  while (osRtxInfo.kernel.tick != kernel_tick) {
+ #####:   469:    osRtxInfo.kernel.tick++;
+     -:   470:
+     -:   471:    // Process Thread Delays
+     -:   472:    osRtxThreadDelayTick();
+     -:   473:
+     -:   474:    // Process Timers
+     -:   475:    if (osRtxInfo.timer.tick != NULL) {
+     -:   476:      osRtxInfo.timer.tick();
+     -:   477:    }
+     -:   478:
+     -:   479:#ifdef RTX_THREAD_WATCHDOG
+     -:   480:    // Process Watchdog Timers
+     -:   481:    osRtxThreadWatchdogTick();
+     -:   482:#endif
+     -:   483:  }
+     -:   484:
+     -:   485:  osRtxInfo.kernel.state = osRtxKernelRunning;
+     -:   486:
+ #####:   487:  osRtxThreadDispatch(NULL);
+     -:   488:
+     -:   489:  KernelUnblock();
+     -:   490:
+     -:   491:  EvrRtxKernelResumed();
+     -:   492:}
+     -:   493:
+     -:   494:/// Protect the RTOS Kernel scheduler access.
+     -:   495:/// \note API identical to osKernelProtect
+     -:   496:static osStatus_t svcRtxKernelProtect (uint32_t safety_class) {
+     -:   497:#ifdef RTX_SAFETY_CLASS
+     -:   498:  uint32_t   thread_class;
+     -:   499:  osStatus_t status;
+     -:   500:
+     -:   501:  // Check parameters
+     -:   502:  if (safety_class > 0x0FU) {
+     -:   503:    EvrRtxKernelError((int32_t)osErrorParameter);
+     -:   504:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   505:    return osErrorParameter;
+     -:   506:  }
+     -:   507:
+     -:   508:  switch (osRtxInfo.kernel.state) {
+     -:   509:    case osRtxKernelInactive:
+     -:   510:      EvrRtxKernelError(osRtxErrorKernelNotReady);
+     -:   511:      status = osError;
+     -:   512:      break;
+     -:   513:    case osRtxKernelReady:
+     -:   514:      osRtxInfo.kernel.protect &= (uint8_t)~osRtxKernelProtectClass_Msk;
+     -:   515:      osRtxInfo.kernel.protect |= (uint8_t)(safety_class << osRtxKernelProtectClass_Pos);
+     -:   516:      EvrRtxKernelProtected();
+     -:   517:      status = osOK;
+     -:   518:      break;
+     -:   519:    case osRtxKernelRunning:
+     -:   520:      // Check the safety class
+     -:   521:      thread_class = (uint32_t)osRtxThreadGetRunning()->attr >> osRtxAttrClass_Pos;
+     -:   522:      if ((safety_class > thread_class) ||
+     -:   523:          (thread_class < ((uint32_t)osRtxInfo.kernel.protect >> osRtxKernelProtectClass_Pos))) {
+     -:   524:        EvrRtxKernelError((int32_t)osErrorSafetyClass);
+     -:   525:        status = osErrorSafetyClass;
+     -:   526:        break;
+     -:   527:      }
+     -:   528:      osRtxInfo.kernel.protect &= (uint8_t)~osRtxKernelProtectClass_Msk;
+     -:   529:      osRtxInfo.kernel.protect |= (uint8_t)(safety_class << osRtxKernelProtectClass_Pos);
+     -:   530:      EvrRtxKernelProtected();
+     -:   531:      status = osOK;
+     -:   532:      break;
+     -:   533:    case osRtxKernelLocked:
+     -:   534:    case osRtxKernelSuspended:
+     -:   535:      EvrRtxKernelError(osRtxErrorKernelNotRunning);
+     -:   536:      status = osError;
+     -:   537:      break;
+     -:   538:    default:
+     -:   539:      // Should never come here
+     -:   540:      status = osError;
+     -:   541:      break;
+     -:   542:  }
+     -:   543:
+     -:   544:  return status;
+     -:   545:#else
+     -:   546:  (void)safety_class;
+     -:   547:  return osError;
+     -:   548:#endif
+     -:   549:}
+     -:   550:
+     -:   551:/// Destroy objects for specified safety classes.
+     -:   552:/// \note API identical to osKernelDestroyClass
+     -:   553:static osStatus_t svcRtxKernelDestroyClass (uint32_t safety_class, uint32_t mode) {
+     -:   554:#ifdef RTX_SAFETY_CLASS
+     -:   555:  os_thread_t *thread;
+     -:   556:  os_thread_t *thread_next;
+     -:   557:
+     -:   558:  // Check parameters
+     -:   559:  if (safety_class > 0x0FU) {
+     -:   560:    EvrRtxKernelError((int32_t)osErrorParameter);
+     -:   561:    //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   562:    return osErrorParameter;
+     -:   563:  }
+     -:   564:
+     -:   565:  // Check running thread safety class (when called from thread)
+     -:   566:  thread = osRtxThreadGetRunning();
+     -:   567:  if ((thread != NULL) && IsSVCallIrq()) {
+     -:   568:    if ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   569:         ((thread->attr >> osRtxAttrClass_Pos) < (uint8_t)safety_class)) ||
+     -:   570:        (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   571:         (((thread->attr >> osRtxAttrClass_Pos) + 1U) < (uint8_t)safety_class))) {
+     -:   572:      EvrRtxKernelError((int32_t)osErrorSafetyClass);
+     -:   573:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   574:      return osErrorSafetyClass;
+     -:   575:    }
+     -:   576:  }
+     -:   577:
+     -:   578:  // Delete RTOS objects for safety class
+     -:   579:  osRtxMutexDeleteClass(safety_class, mode);
+     -:   580:  osRtxSemaphoreDeleteClass(safety_class, mode);
+     -:   581:  osRtxMemoryPoolDeleteClass(safety_class, mode);
+     -:   582:  osRtxMessageQueueDeleteClass(safety_class, mode);
+     -:   583:  osRtxEventFlagsDeleteClass(safety_class, mode);
+     -:   584:  osRtxTimerDeleteClass(safety_class, mode);
+     -:   585:
+     -:   586:  // Threads in Wait List
+     -:   587:  thread = osRtxInfo.thread.wait_list;
+     -:   588:  while (thread != NULL) {
+     -:   589:    thread_next = thread->delay_next;
+     -:   590:    if ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   591:         ((thread->attr >> osRtxAttrClass_Pos) == (uint8_t)safety_class)) ||
+     -:   592:        (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   593:         ((thread->attr >> osRtxAttrClass_Pos) <  (uint8_t)safety_class))) {
+     -:   594:      osRtxThreadListRemove(thread);
+     -:   595:      osRtxThreadDelayRemove(thread);
+     -:   596:#ifdef RTX_THREAD_WATCHDOG
+     -:   597:      osRtxThreadWatchdogRemove(thread);
+     -:   598:#endif
+     -:   599:      osRtxMutexOwnerRelease(thread->mutex_list);
+     -:   600:      osRtxThreadJoinWakeup(thread);
+     -:   601:      osRtxThreadDestroy(thread);
+     -:   602:    }
+     -:   603:    thread = thread_next;
+     -:   604:  }
+     -:   605:
+     -:   606:  // Threads in Delay List
+     -:   607:  thread = osRtxInfo.thread.delay_list;
+     -:   608:  while (thread != NULL) {
+     -:   609:    thread_next = thread->delay_next;
+     -:   610:    if ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   611:         ((thread->attr >> osRtxAttrClass_Pos) == (uint8_t)safety_class)) ||
+     -:   612:        (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   613:         ((thread->attr >> osRtxAttrClass_Pos) <  (uint8_t)safety_class))) {
+     -:   614:      osRtxThreadListRemove(thread);
+     -:   615:      osRtxThreadDelayRemove(thread);
+     -:   616:#ifdef RTX_THREAD_WATCHDOG
+     -:   617:      osRtxThreadWatchdogRemove(thread);
+     -:   618:#endif
+     -:   619:      osRtxMutexOwnerRelease(thread->mutex_list);
+     -:   620:      osRtxThreadJoinWakeup(thread);
+     -:   621:      osRtxThreadDestroy(thread);
+     -:   622:    }
+     -:   623:    thread = thread_next;
+     -:   624:  }
+     -:   625:
+     -:   626:  // Threads in Ready List
+     -:   627:  thread = osRtxInfo.thread.ready.thread_list;
+     -:   628:  while (thread != NULL) {
+     -:   629:    thread_next = thread->thread_next;
+     -:   630:    if ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   631:         ((thread->attr >> osRtxAttrClass_Pos) == (uint8_t)safety_class)) ||
+     -:   632:        (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   633:         ((thread->attr >> osRtxAttrClass_Pos) <  (uint8_t)safety_class))) {
+     -:   634:      osRtxThreadListRemove(thread);
+     -:   635:#ifdef RTX_THREAD_WATCHDOG
+     -:   636:      osRtxThreadWatchdogRemove(thread);
+     -:   637:#endif
+     -:   638:      osRtxMutexOwnerRelease(thread->mutex_list);
+     -:   639:      osRtxThreadJoinWakeup(thread);
+     -:   640:      osRtxThreadDestroy(thread);
+     -:   641:    }
+     -:   642:    thread = thread_next;
+     -:   643:  }
+     -:   644:
+     -:   645:  // Running Thread
+     -:   646:  thread = osRtxThreadGetRunning();
+     -:   647:  if ((thread != NULL) &&
+     -:   648:      ((((mode & osSafetyWithSameClass)  != 0U) &&
+     -:   649:        ((thread->attr >> osRtxAttrClass_Pos) == (uint8_t)safety_class)) ||
+     -:   650:       (((mode & osSafetyWithLowerClass) != 0U) &&
+     -:   651:        ((thread->attr >> osRtxAttrClass_Pos) <  (uint8_t)safety_class)))) {
+     -:   652:    if ((osRtxKernelGetState() != osRtxKernelRunning) ||
+     -:   653:        (osRtxInfo.thread.ready.thread_list == NULL)) {
+     -:   654:      osRtxThreadDispatch(NULL);
+     -:   655:      EvrRtxKernelError((int32_t)osErrorResource);
+     -:   656:      //lint -e{904} "Return statement before end of function" [MISRA Note 1]
+     -:   657:      return osErrorResource;
+     -:   658:    }
+     -:   659:#ifdef RTX_THREAD_WATCHDOG
+     -:   660:    osRtxThreadWatchdogRemove(thread);
+     -:   661:#endif
+     -:   662:    osRtxMutexOwnerRelease(thread->mutex_list);
+     -:   663:    osRtxThreadJoinWakeup(thread);
+     -:   664:    // Switch to next Ready Thread
+     -:   665:    osRtxThreadSwitch(osRtxThreadListGet(&osRtxInfo.thread.ready));
+     -:   666:    // Update Stack Pointer
+     -:   667:    thread->sp = __get_PSP();
+     -:   668:#ifdef RTX_STACK_CHECK
+     -:   669:    // Check Stack usage
+     -:   670:    if (!osRtxThreadStackCheck(thread)) {
+     -:   671:      osRtxThreadSetRunning(osRtxInfo.thread.run.next);
+     -:   672:      (void)osRtxKernelErrorNotify(osRtxErrorStackOverflow, thread);
+     -:   673:    }
+     -:   674:#endif
+     -:   675:    // Mark running thread as deleted
+     -:   676:    osRtxThreadSetRunning(NULL);
+     -:   677:    // Destroy Thread
+     -:   678:    osRtxThreadDestroy(thread);
+     -:   679:  } else {
+     -:   680:    osRtxThreadDispatch(NULL);
+     -:   681:  }
+     -:   682:
+     -:   683:  return osOK;
+     -:   684:#else
+     -:   685:  (void)safety_class;
+     -:   686:  (void)mode;
+     -:   687:  return osError;
+     -:   688:#endif
+     -:   689:}
+     -:   690:
+     -:   691:/// Get the RTOS kernel tick count.
+     -:   692:/// \note API identical to osKernelGetTickCount
+     -:   693:static uint32_t svcRtxKernelGetTickCount (void) {
+     -:   694:  EvrRtxKernelGetTickCount(osRtxInfo.kernel.tick);
+     -:   695:  return osRtxInfo.kernel.tick;
+     -:   696:}
+     -:   697:
+     -:   698:/// Get the RTOS kernel tick frequency.
+     -:   699:/// \note API identical to osKernelGetTickFreq
+     -:   700:static uint32_t svcRtxKernelGetTickFreq (void) {
+     -:   701:  EvrRtxKernelGetTickFreq(osRtxConfig.tick_freq);
+ #####:   702:  return osRtxConfig.tick_freq;
+     -:   703:}
+     -:   704:
+     -:   705:/// Get the RTOS kernel system timer count.
+     -:   706:/// \note API identical to osKernelGetSysTimerCount
+     -:   707:static uint32_t svcRtxKernelGetSysTimerCount (void) {
+     -:   708:  uint32_t tick;
+     -:   709:  uint32_t count;
+     -:   710:
+     -:   711:  tick  = (uint32_t)osRtxInfo.kernel.tick;
+     -:   712:  count = OS_Tick_GetCount();
+     -:   713:  if (OS_Tick_GetOverflow() != 0U) {
+ #####:   714:    count = OS_Tick_GetCount();
+     -:   715:    tick++;
+     -:   716:  }
+     -:   717:  count += tick * OS_Tick_GetInterval();
+ #####:   718:  EvrRtxKernelGetSysTimerCount(count);
+     -:   719:  return count;
+     -:   720:}
+     -:   721:
+     -:   722:/// Get the RTOS kernel system timer frequency.
+     -:   723:/// \note API identical to osKernelGetSysTimerFreq
+     -:   724:static uint32_t svcRtxKernelGetSysTimerFreq (void) {
+     -:   725:  uint32_t freq = OS_Tick_GetClock();
+     -:   726:  EvrRtxKernelGetSysTimerFreq(freq);
+     -:   727:  return freq;
+     -:   728:}
+     -:   729:
+     -:   730://  Service Calls definitions
+     -:   731://lint ++flb "Library Begin" [MISRA Note 11]
+     2:   732:SVC0_0 (KernelInitialize,       osStatus_t)
+ #####:   733:SVC0_3 (KernelGetInfo,          osStatus_t, osVersion_t *, char *, uint32_t)
+     1:   734:SVC0_0 (KernelStart,            osStatus_t)
+     -:   735:SVC0_0 (KernelLock,             int32_t)
+     -:   736:SVC0_0 (KernelUnlock,           int32_t)
+ #####:   737:SVC0_1 (KernelRestoreLock,      int32_t, int32_t)
+ #####:   738:SVC0_0 (KernelSuspend,          uint32_t)
+     -:   739:SVC0_1N(KernelResume,           void, uint32_t)
+ #####:   740:SVC0_1 (KernelProtect,          osStatus_t, uint32_t)
+ #####:   741:SVC0_2 (KernelDestroyClass,     osStatus_t, uint32_t, uint32_t)
+     1:   742:SVC0_0 (KernelGetState,         osKernelState_t)
+     -:   743:SVC0_0 (KernelGetTickCount,     uint32_t)
+     -:   744:SVC0_0 (KernelGetTickFreq,      uint32_t)
+     -:   745:SVC0_0 (KernelGetSysTimerCount, uint32_t)
+     -:   746:SVC0_0 (KernelGetSysTimerFreq,  uint32_t)
+     -:   747://lint --flb "Library End"
+     -:   748:
+     -:   749:
+     -:   750://  ==== Library functions ====
+     -:   751:
+     -:   752:/// RTOS Kernel Pre-Initialization Hook
+     -:   753://lint -esym(759,osRtxKernelBeforeInit) "Prototype in header"
+     -:   754://lint -esym(765,osRtxKernelBeforeInit) "Global scope (can be overridden)"
+     -:   755://lint -esym(522,osRtxKernelBeforeInit) "Can be overridden (do not lack side-effects)"
+     -:   756:__WEAK void osRtxKernelBeforeInit (void) {
+     2:   757:}
+     -:   758:
+     -:   759:/// RTOS Kernel Error Notification Handler
+     -:   760:/// \note API identical to osRtxErrorNotify
+ #####:   761:uint32_t osRtxKernelErrorNotify (uint32_t code, void *object_id) {
+ #####:   762:  EvrRtxKernelErrorNotify(code, object_id);
+ #####:   763:  return osRtxErrorNotify(code, object_id);
+     -:   764:}
+     -:   765:
+     -:   766:
+     -:   767://  ==== Public API ====
+     -:   768:
+     -:   769:/// Initialize the RTOS Kernel.
+     2:   770:osStatus_t osKernelInitialize (void) {
+     -:   771:  osStatus_t status;
+     -:   772:
+     2:   773:  osRtxKernelBeforeInit();
+     2:   774:  EvrRtxKernelInitialize();
+     2:   775:  if (IsException() || IsIrqMasked()) {
+ #####:   776:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   777:    status = osErrorISR;
+     -:   778:  } else {
+     -:   779:    status = __svcKernelInitialize();
+     -:   780:  }
+ #####:   781:  return status;
+     -:   782:}
+     -:   783:
+     -:   784:///  Get RTOS Kernel Information.
+ #####:   785:osStatus_t osKernelGetInfo (osVersion_t *version, char *id_buf, uint32_t id_size) {
+     -:   786:  osStatus_t status;
+     -:   787:
+ #####:   788:  EvrRtxKernelGetInfo(version, id_buf, id_size);
+ #####:   789:  if (IsException() || IsIrqMasked() || IsPrivileged()) {
+     -:   790:    status = svcRtxKernelGetInfo(version, id_buf, id_size);
+     -:   791:  } else {
+     -:   792:    status =  __svcKernelGetInfo(version, id_buf, id_size);
+     -:   793:  }
+ #####:   794:  return status;
+     -:   795:}
+     -:   796:
+     -:   797:/// Get the current RTOS Kernel state.
+     -:   798:osKernelState_t osKernelGetState (void) {
+     -:   799:  osKernelState_t state;
+     -:   800:
+    19:   801:  if (IsException() || IsIrqMasked() || IsPrivileged()) {
+     -:   802:    state = svcRtxKernelGetState();
+     -:   803:  } else {
+     -:   804:    state =  __svcKernelGetState();
+     -:   805:  }
+    18:   806:  return state;
+     -:   807:}
+     -:   808:
+     -:   809:/// Start the RTOS Kernel scheduler.
+     1:   810:osStatus_t osKernelStart (void) {
+     -:   811:  osStatus_t status;
+     -:   812:
+     1:   813:  EvrRtxKernelStart();
+     1:   814:  if (IsException() || IsIrqMasked()) {
+ #####:   815:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   816:    status = osErrorISR;
+     -:   817:  } else {
+     -:   818:    status = __svcKernelStart();
+     -:   819:  }
+ #####:   820:  return status;
+     -:   821:}
+     -:   822:
+     -:   823:/// Lock the RTOS Kernel scheduler.
+     -:   824:int32_t osKernelLock (void) {
+     -:   825:  int32_t lock;
+     -:   826:
+     -:   827:  EvrRtxKernelLock();
+ #####:   828:  if (IsException() || IsIrqMasked()) {
+     -:   829:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   830:    lock = (int32_t)osErrorISR;
+     -:   831:  } else {
+     -:   832:    lock = __svcKernelLock();
+     -:   833:  }
+ #####:   834:  return lock;
+     -:   835:}
+     -:   836:
+     -:   837:/// Unlock the RTOS Kernel scheduler.
+     -:   838:int32_t osKernelUnlock (void) {
+     -:   839:  int32_t lock;
+     -:   840:
+     -:   841:  EvrRtxKernelUnlock();
+ #####:   842:  if (IsException() || IsIrqMasked()) {
+     -:   843:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   844:    lock = (int32_t)osErrorISR;
+     -:   845:  } else {
+     -:   846:    lock = __svcKernelUnlock();
+     -:   847:  }
+     -:   848:  return lock;
+     -:   849:}
+     -:   850:
+     -:   851:/// Restore the RTOS Kernel scheduler lock state.
+     -:   852:int32_t osKernelRestoreLock (int32_t lock) {
+     -:   853:  int32_t lock_new;
+     -:   854:
+ #####:   855:  EvrRtxKernelRestoreLock(lock);
+ #####:   856:  if (IsException() || IsIrqMasked()) {
+     -:   857:    if (IsFault() || IsSVCallIrq() || IsPendSvIrq() || IsTickIrq(osRtxInfo.tick_irqn)) {
+     -:   858:      lock_new = svcRtxKernelRestoreLock(lock);
+     -:   859:    } else {
+ #####:   860:      EvrRtxKernelError((int32_t)osErrorISR);
+     -:   861:      lock_new = (int32_t)osErrorISR;
+     -:   862:    }
+     -:   863:  } else {
+     -:   864:    lock_new   =  __svcKernelRestoreLock(lock);
+     -:   865:  }
+ #####:   866:  return lock_new;
+     -:   867:}
+     -:   868:
+     -:   869:/// Suspend the RTOS Kernel scheduler.
+     -:   870:uint32_t osKernelSuspend (void) {
+     -:   871:  uint32_t ticks;
+     -:   872:
+     -:   873:  EvrRtxKernelSuspend();
+     -:   874:  if (IsException() || IsIrqMasked()) {
+     -:   875:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   876:    ticks = 0U;
+     -:   877:  } else {
+     -:   878:    ticks = __svcKernelSuspend();
+     -:   879:  }
+ #####:   880:  return ticks;
+     -:   881:}
+     -:   882:
+     -:   883:/// Resume the RTOS Kernel scheduler.
+     -:   884:void osKernelResume (uint32_t sleep_ticks) {
+     -:   885:
+     -:   886:  EvrRtxKernelResume(sleep_ticks);
+     -:   887:  if (IsException() || IsIrqMasked()) {
+ #####:   888:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   889:  } else {
+     -:   890:    __svcKernelResume(sleep_ticks);
+     -:   891:  }
+ #####:   892:}
+     -:   893:
+     -:   894:/// Protect the RTOS Kernel scheduler access.
+     -:   895:osStatus_t osKernelProtect (uint32_t safety_class) {
+     -:   896:  osStatus_t status;
+     -:   897:
+     -:   898:  EvrRtxKernelProtect(safety_class);
+     -:   899:  if (IsException() || IsIrqMasked()) {
+     -:   900:    EvrRtxKernelError((int32_t)osErrorISR);
+     -:   901:    status = osErrorISR;
+     -:   902:  } else {
+     -:   903:    status = __svcKernelProtect(safety_class);
+     -:   904:  }
+ #####:   905:  return status;
+     -:   906:}
+     -:   907:
+     -:   908:/// Destroy RTOS objects for specified safety classes.
+     -:   909:osStatus_t osKernelDestroyClass (uint32_t safety_class, uint32_t mode) {
+     -:   910:  osStatus_t status;
+     -:   911:
+ #####:   912:  EvrRtxKernelDestroyClass(safety_class, mode);
+ #####:   913:  if (IsException() || IsIrqMasked()) {
+ #####:   914:    if (IsTickIrq(osRtxInfo.tick_irqn)) {
+     -:   915:      status = svcRtxKernelDestroyClass(safety_class, mode);
+     -:   916:    } else {
+     -:   917:      EvrRtxKernelError((int32_t)osErrorISR);
+     -:   918:      status = osErrorISR;
+     -:   919:    }
+     -:   920:  } else {
+     -:   921:    status   =  __svcKernelDestroyClass(safety_class, mode);
+     -:   922:  }
+ #####:   923:  return status;
+     -:   924:}
+     -:   925:
+     -:   926:/// Get the RTOS kernel tick count.
+     -:   927:uint32_t osKernelGetTickCount (void) {
+     -:   928:  uint32_t count;
+     -:   929:
+     -:   930:  if (IsException() || IsIrqMasked()) {
+     -:   931:    count = svcRtxKernelGetTickCount();
+     -:   932:  } else {
+     -:   933:    count =  __svcKernelGetTickCount();
+     -:   934:  }
+     -:   935:  return count;
+     -:   936:}
+     -:   937:
+     -:   938:/// Get the RTOS kernel tick frequency.
+     -:   939:uint32_t osKernelGetTickFreq (void) {
+     -:   940:  uint32_t freq;
+     -:   941:
+     -:   942:  if (IsException() || IsIrqMasked()) {
+     -:   943:    freq = svcRtxKernelGetTickFreq();
+     -:   944:  } else {
+     -:   945:    freq =  __svcKernelGetTickFreq();
+     -:   946:  }
+     -:   947:  return freq;
+     -:   948:}
+     -:   949:
+     -:   950:/// Get the RTOS kernel system timer count.
+     -:   951:uint32_t osKernelGetSysTimerCount (void) {
+     -:   952:  uint32_t count;
+     -:   953:
+     -:   954:  if (IsException() || IsIrqMasked()) {
+     -:   955:    count = svcRtxKernelGetSysTimerCount();
+     -:   956:  } else {
+     -:   957:    count =  __svcKernelGetSysTimerCount();
+     -:   958:  }
+ #####:   959:  return count;
+     -:   960:}
+     -:   961:
+     -:   962:/// Get the RTOS kernel system timer frequency.
+     -:   963:uint32_t osKernelGetSysTimerFreq (void) {
+     -:   964:  uint32_t freq;
+     -:   965:
+     -:   966:  if (IsException() || IsIrqMasked()) {
+     -:   967:    freq = svcRtxKernelGetSysTimerFreq();
+     -:   968:  } else {
+     -:   969:    freq =  __svcKernelGetSysTimerFreq();
+     -:   970:  }
+     -:   971:  return freq;
+     -:   972:}

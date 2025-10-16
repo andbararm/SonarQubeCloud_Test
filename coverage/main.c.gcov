@@ -1,124 +1,127 @@
-        /**************************************************************************//**
-         * @file     main.c
-         * @brief    Unit test example using Unity
-         * @version  V1.0.0
-         * @date     04. June 2024
-         ******************************************************************************/
-        /*
-         * Copyright (c) 2017-2023 ARM Limited. All rights reserved.
-         *
-         * SPDX-License-Identifier: Apache-2.0
-         *
-         * Licensed under the Apache License, Version 2.0 (the License); you may
-         * not use this file except in compliance with the License.
-         * You may obtain a copy of the License at
-         *
-         * www.apache.org/licenses/LICENSE-2.0
-         *
-         * Unless required by applicable law or agreed to in writing, software
-         * distributed under the License is distributed on an AS IS BASIS, WITHOUT
-         * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-         * See the License for the specific language governing permissions and
-         * limitations under the License.
-         */
-        
-        #include "RTE_Components.h"
-        #include  CMSIS_device_header
-        #include "cmsis_os2.h"
-        #ifdef RTE_Compiler_EventRecorder
-        #include "EventRecorder.h"
-        #endif
-        
-        #include <stdio.h>
-        #include <stdlib.h>
-        #include "unity.h"
-        
-        /* Application function to test */
-        static int my_sum(int a, int b) {
-     1    return a + b;
-        }
-        
-        /*============= UNIT TESTS ============== */
-        
-        /* Called in RUN_TEST before executing test function */
-        void setUp(void) {
-          // set stuff up here
-        }
-        
-        /* Called in RUN_TEST after executing test function */
-        void tearDown(void) {
-          // clean stuff up here
-        }
-        
-        /* Testing summation of positive integers */
-        static void test_my_sum_pos(void) {
-     1    const int sum = my_sum(1, 1);
-     1    TEST_ASSERT_EQUAL_INT(2, sum);
-        }
-        
-        /* Testing summation of negative integers */
-        static void test_my_sum_neg(void) {
-     1    const int sum = my_sum(-1, -1);
-     1    TEST_ASSERT_EQUAL_INT(-2, sum);
-        }
-        
-        /* Testing summation of zeros */
-        static void test_my_sum_zero(void) {
-     1    const int sum = my_sum(0, 0);
-     1    TEST_ASSERT_EQUAL_INT(0, sum);
-        }
-        
-        /* Failing test with incorrect summation value */
-        static void test_my_sum_fail(void) {
-     1    const int sum = my_sum(1, -1);
-          //TEST_ASSERT_EQUAL_INT(2, sum);
-     1    TEST_ASSERT_EQUAL_INT(0, sum);
-        }
-        
-        /*---------------------------------------------------------------------------
-         * Application main thread
-         *---------------------------------------------------------------------------*/
-        
-        static void app_main (void *argument) {
-     1    (void)argument;
-        
-     1    printf("---[ UNITY BEGIN ]---\n");
-     1    UNITY_BEGIN();
-     1    RUN_TEST(test_my_sum_pos);
-     1    RUN_TEST(test_my_sum_neg);
-     1    RUN_TEST(test_my_sum_fail);
-     1    RUN_TEST(test_my_sum_zero);
-     1    const int result = UNITY_END();
-     1    printf("---[ UNITY END ]---\n");
-        
-     1    osThreadExit();
-        }
-        
-        /*---------------------------------------------------------------------------
-         * Application initialization
-         *---------------------------------------------------------------------------*/
-        static void app_initialize (void) {
-     1    osThreadNew(app_main, NULL, NULL);
-        }
-        
-        
-        /*---------------------------------------------------------------------------
-         * C main
-         *---------------------------------------------------------------------------*/
-        int main (void) {
-        
-        #if defined(RTE_Compiler_EventRecorder) && \
-            (defined(__MICROLIB) || \
-            !(defined(RTE_CMSIS_RTOS2_RTX5) || defined(RTE_CMSIS_RTOS2_FreeRTOS)))
-     1    EventRecorderInitialize(EventRecordAll, 1U);
-        #endif
-        
-     1    osKernelInitialize();                 // Initialize CMSIS-RTOS2
-     1    app_initialize();                     // Initialize application
-     1    osKernelStart();                      // Start thread execution
-        
-          for (;;) {}
-        }
-        
-        
-        
+     -:     0:Source:../../../../Project/main.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/**************************************************************************//**
+     -:     2: * @file     main.c
+     -:     3: * @brief    Unit test example using Unity
+     -:     4: * @version  V1.0.0
+     -:     5: * @date     04. June 2024
+     -:     6: ******************************************************************************/
+     -:     7:/*
+     -:     8: * Copyright (c) 2017-2023 ARM Limited. All rights reserved.
+     -:     9: *
+     -:    10: * SPDX-License-Identifier: Apache-2.0
+     -:    11: *
+     -:    12: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:    13: * not use this file except in compliance with the License.
+     -:    14: * You may obtain a copy of the License at
+     -:    15: *
+     -:    16: * www.apache.org/licenses/LICENSE-2.0
+     -:    17: *
+     -:    18: * Unless required by applicable law or agreed to in writing, software
+     -:    19: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    20: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    21: * See the License for the specific language governing permissions and
+     -:    22: * limitations under the License.
+     -:    23: */
+     -:    24:
+     -:    25:#include "RTE_Components.h"
+     -:    26:#include  CMSIS_device_header
+     -:    27:#include "cmsis_os2.h"
+     -:    28:#ifdef RTE_Compiler_EventRecorder
+     -:    29:#include "EventRecorder.h"
+     -:    30:#endif
+     -:    31:
+     -:    32:#include <stdio.h>
+     -:    33:#include <stdlib.h>
+     -:    34:#include "unity.h"
+     -:    35:
+     -:    36:/* Application function to test */
+     -:    37:static int my_sum(int a, int b) {
+     -:    38:  return a + b;
+     -:    39:}
+     -:    40:
+     -:    41:/*============= UNIT TESTS ============== */
+     -:    42:
+     -:    43:/* Called in RUN_TEST before executing test function */
+     -:    44:void setUp(void) {
+     -:    45:  // set stuff up here
+ #####:    46:}
+     -:    47:
+     -:    48:/* Called in RUN_TEST after executing test function */
+     -:    49:void tearDown(void) {
+     -:    50:  // clean stuff up here
+     -:    51:}
+     -:    52:
+     -:    53:/* Testing summation of positive integers */
+     1:    54:static void test_my_sum_pos(void) {
+     -:    55:  const int sum = my_sum(1, 1);
+     1:    56:  TEST_ASSERT_EQUAL_INT(2, sum);
+     1:    57:}
+     -:    58:
+     -:    59:/* Testing summation of negative integers */
+     1:    60:static void test_my_sum_neg(void) {
+     -:    61:  const int sum = my_sum(-1, -1);
+     1:    62:  TEST_ASSERT_EQUAL_INT(-2, sum);
+     1:    63:}
+     -:    64:
+     -:    65:/* Testing summation of zeros */
+     1:    66:static void test_my_sum_zero(void) {
+     -:    67:  const int sum = my_sum(0, 0);
+     1:    68:  TEST_ASSERT_EQUAL_INT(0, sum);
+     1:    69:}
+     -:    70:
+     -:    71:/* Failing test with incorrect summation value */
+     1:    72:static void test_my_sum_fail(void) {
+     -:    73:  const int sum = my_sum(1, -1);
+     -:    74:  //TEST_ASSERT_EQUAL_INT(2, sum);
+     1:    75:  TEST_ASSERT_EQUAL_INT(0, sum);
+     1:    76:}
+     -:    77:
+     -:    78:/*---------------------------------------------------------------------------
+     -:    79: * Application main thread
+     -:    80: *---------------------------------------------------------------------------*/
+     -:    81:
+     -:    82:static void app_main (void *argument) {
+     -:    83:  (void)argument;
+     -:    84:
+     1:    85:  printf("---[ UNITY BEGIN ]---\n");
+     1:    86:  UNITY_BEGIN();
+     1:    87:  RUN_TEST(test_my_sum_pos);
+     1:    88:  RUN_TEST(test_my_sum_neg);
+     1:    89:  RUN_TEST(test_my_sum_fail);
+     1:    90:  RUN_TEST(test_my_sum_zero);
+     1:    91:  const int result = UNITY_END();
+     1:    92:  printf("---[ UNITY END ]---\n");
+     -:    93:
+     1:    94:  osThreadExit();
+     -:    95:}
+     -:    96:
+     -:    97:/*---------------------------------------------------------------------------
+     -:    98: * Application initialization
+     -:    99: *---------------------------------------------------------------------------*/
+     -:   100:static void app_initialize (void) {
+     1:   101:  osThreadNew(app_main, NULL, NULL);
+     -:   102:}
+     -:   103:
+     -:   104:
+     -:   105:/*---------------------------------------------------------------------------
+     -:   106: * C main
+     -:   107: *---------------------------------------------------------------------------*/
+     -:   108:int main (void) {
+     -:   109:
+     -:   110:#if defined(RTE_Compiler_EventRecorder) && \
+     -:   111:    (defined(__MICROLIB) || \
+     -:   112:    !(defined(RTE_CMSIS_RTOS2_RTX5) || defined(RTE_CMSIS_RTOS2_FreeRTOS)))
+     -:   113:  EventRecorderInitialize(EventRecordAll, 1U);
+     -:   114:#endif
+     -:   115:
+     1:   116:  osKernelInitialize();                 // Initialize CMSIS-RTOS2
+     -:   117:  app_initialize();                     // Initialize application
+     1:   118:  osKernelStart();                      // Start thread execution
+     -:   119:
+ #####:   120:  for (;;) {}
+     -:   121:}
+     -:   122:
+     -:   123:

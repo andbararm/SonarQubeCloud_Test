@@ -1,0 +1,2270 @@
+     -:     0:Source:../../../../../../../../../Keil/ARM/PACK/ARM/CMSIS-RTX/5.9.0/Source/rtx_evr.c
+     -:     0:Graph:
+     -:     0:Runs:1
+     -:     0:Programs:1
+     -:     1:/*
+     -:     2: * Copyright (c) 2013-2023 Arm Limited. All rights reserved.
+     -:     3: *
+     -:     4: * SPDX-License-Identifier: Apache-2.0
+     -:     5: *
+     -:     6: * Licensed under the Apache License, Version 2.0 (the License); you may
+     -:     7: * not use this file except in compliance with the License.
+     -:     8: * You may obtain a copy of the License at
+     -:     9: *
+     -:    10: * www.apache.org/licenses/LICENSE-2.0
+     -:    11: *
+     -:    12: * Unless required by applicable law or agreed to in writing, software
+     -:    13: * distributed under the License is distributed on an AS IS BASIS, WITHOUT
+     -:    14: * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     -:    15: * See the License for the specific language governing permissions and
+     -:    16: * limitations under the License.
+     -:    17: *
+     -:    18: * -----------------------------------------------------------------------------
+     -:    19: *
+     -:    20: * Project:     CMSIS-RTOS RTX
+     -:    21: * Title:       RTX Event Recorder
+     -:    22: *
+     -:    23: * -----------------------------------------------------------------------------
+     -:    24: */
+     -:    25:
+     -:    26:#include <string.h>
+     -:    27:#include "cmsis_compiler.h"
+     -:    28:#include "rtx_evr.h"                    // RTX Event Recorder definitions
+     -:    29:
+     -:    30:#ifdef  RTE_CMSIS_View_EventRecorder
+     -:    31:
+     -:    32://lint -e923 -e9074 -e9078 [MISRA Note 13]
+     -:    33:
+     -:    34:/// Event IDs for "RTX Memory Management"
+     -:    35:#define EvtRtxMemoryInit                    EventID(EventLevelOp,     EvtRtxMemoryNo, 0x00U)
+     -:    36:#define EvtRtxMemoryAlloc                   EventID(EventLevelOp,     EvtRtxMemoryNo, 0x01U)
+     -:    37:#define EvtRtxMemoryFree                    EventID(EventLevelOp,     EvtRtxMemoryNo, 0x02U)
+     -:    38:#define EvtRtxMemoryBlockInit               EventID(EventLevelOp,     EvtRtxMemoryNo, 0x03U)
+     -:    39:#define EvtRtxMemoryBlockAlloc              EventID(EventLevelOp,     EvtRtxMemoryNo, 0x04U)
+     -:    40:#define EvtRtxMemoryBlockFree               EventID(EventLevelOp,     EvtRtxMemoryNo, 0x05U)
+     -:    41:
+     -:    42:/// Event IDs for "RTX Kernel"
+     -:    43:#define EvtRtxKernelError                   EventID(EventLevelError,  EvtRtxKernelNo, 0x00U)
+     -:    44:#define EvtRtxKernelInitialize              EventID(EventLevelAPI,    EvtRtxKernelNo, 0x01U)
+     -:    45:#define EvtRtxKernelInitialized             EventID(EventLevelOp,     EvtRtxKernelNo, 0x02U)
+     -:    46:#define EvtRtxKernelGetInfo                 EventID(EventLevelAPI,    EvtRtxKernelNo, 0x03U)
+     -:    47:#define EvtRtxKernelInfoRetrieved           EventID(EventLevelOp,     EvtRtxKernelNo, 0x04U)
+     -:    48:#define EvtRtxKernelInfoRetrieved_Detail    EventID(EventLevelDetail, EvtRtxKernelNo, 0x05U)
+     -:    49:#define EvtRtxKernelGetState                EventID(EventLevelAPI,    EvtRtxKernelNo, 0x06U)
+     -:    50:#define EvtRtxKernelStart                   EventID(EventLevelAPI,    EvtRtxKernelNo, 0x07U)
+     -:    51:#define EvtRtxKernelStarted                 EventID(EventLevelOp,     EvtRtxKernelNo, 0x08U)
+     -:    52:#define EvtRtxKernelLock                    EventID(EventLevelAPI,    EvtRtxKernelNo, 0x09U)
+     -:    53:#define EvtRtxKernelLocked                  EventID(EventLevelOp,     EvtRtxKernelNo, 0x0AU)
+     -:    54:#define EvtRtxKernelUnlock                  EventID(EventLevelAPI,    EvtRtxKernelNo, 0x0BU)
+     -:    55:#define EvtRtxKernelUnlocked                EventID(EventLevelOp,     EvtRtxKernelNo, 0x0CU)
+     -:    56:#define EvtRtxKernelRestoreLock             EventID(EventLevelAPI,    EvtRtxKernelNo, 0x0DU)
+     -:    57:#define EvtRtxKernelLockRestored            EventID(EventLevelOp,     EvtRtxKernelNo, 0x0EU)
+     -:    58:#define EvtRtxKernelSuspend                 EventID(EventLevelAPI,    EvtRtxKernelNo, 0x0FU)
+     -:    59:#define EvtRtxKernelSuspended               EventID(EventLevelOp,     EvtRtxKernelNo, 0x10U)
+     -:    60:#define EvtRtxKernelResume                  EventID(EventLevelAPI,    EvtRtxKernelNo, 0x11U)
+     -:    61:#define EvtRtxKernelResumed                 EventID(EventLevelOp,     EvtRtxKernelNo, 0x12U)
+     -:    62:#define EvtRtxKernelProtect                 EventID(EventLevelAPI,    EvtRtxKernelNo, 0x17U)
+     -:    63:#define EvtRtxKernelProtected               EventID(EventLevelOp,     EvtRtxKernelNo, 0x18U)
+     -:    64:#define EvtRtxKernelGetTickCount            EventID(EventLevelAPI,    EvtRtxKernelNo, 0x13U)
+     -:    65:#define EvtRtxKernelGetTickFreq             EventID(EventLevelAPI,    EvtRtxKernelNo, 0x14U)
+     -:    66:#define EvtRtxKernelGetSysTimerCount        EventID(EventLevelAPI,    EvtRtxKernelNo, 0x15U)
+     -:    67:#define EvtRtxKernelGetSysTimerFreq         EventID(EventLevelAPI,    EvtRtxKernelNo, 0x16U)
+     -:    68:#define EvtRtxKernelErrorNotify             EventID(EventLevelError,  EvtRtxKernelNo, 0x19U)
+     -:    69:#define EvtRtxKernelDestroyClass            EventID(EventLevelAPI,    EvtRtxKernelNo, 0x1AU)
+     -:    70:
+     -:    71:/// Event IDs for "RTX Thread"
+     -:    72:#define EvtRtxThreadError                   EventID(EventLevelError,  EvtRtxThreadNo, 0x00U)
+     -:    73:#define EvtRtxThreadNew                     EventID(EventLevelAPI,    EvtRtxThreadNo, 0x01U)
+     -:    74:#define EvtRtxThreadCreated_Addr            EventID(EventLevelOp,     EvtRtxThreadNo, 0x03U)
+     -:    75:#define EvtRtxThreadCreated_Name            EventID(EventLevelOp,     EvtRtxThreadNo, 0x2CU)
+     -:    76:#define EvtRtxThreadGetName                 EventID(EventLevelAPI,    EvtRtxThreadNo, 0x04U)
+     -:    77:#define EvtRtxThreadGetClass                EventID(EventLevelAPI,    EvtRtxThreadNo, 0x30U)
+     -:    78:#define EvtRtxThreadGetZone                 EventID(EventLevelAPI,    EvtRtxThreadNo, 0x31U)
+     -:    79:#define EvtRtxThreadGetId                   EventID(EventLevelAPI,    EvtRtxThreadNo, 0x06U)
+     -:    80:#define EvtRtxThreadGetState                EventID(EventLevelAPI,    EvtRtxThreadNo, 0x07U)
+     -:    81:#define EvtRtxThreadGetStackSize            EventID(EventLevelAPI,    EvtRtxThreadNo, 0x08U)
+     -:    82:#define EvtRtxThreadGetStackSpace           EventID(EventLevelAPI,    EvtRtxThreadNo, 0x09U)
+     -:    83:#define EvtRtxThreadSetPriority             EventID(EventLevelAPI,    EvtRtxThreadNo, 0x0AU)
+     -:    84:#define EvtRtxThreadPriorityUpdated         EventID(EventLevelOp,     EvtRtxThreadNo, 0x2DU)
+     -:    85:#define EvtRtxThreadGetPriority             EventID(EventLevelAPI,    EvtRtxThreadNo, 0x0BU)
+     -:    86:#define EvtRtxThreadYield                   EventID(EventLevelAPI,    EvtRtxThreadNo, 0x0CU)
+     -:    87:#define EvtRtxThreadSuspend                 EventID(EventLevelAPI,    EvtRtxThreadNo, 0x0DU)
+     -:    88:#define EvtRtxThreadSuspended               EventID(EventLevelOp,     EvtRtxThreadNo, 0x0EU)
+     -:    89:#define EvtRtxThreadResume                  EventID(EventLevelAPI,    EvtRtxThreadNo, 0x0FU)
+     -:    90:#define EvtRtxThreadResumed                 EventID(EventLevelOp,     EvtRtxThreadNo, 0x10U)
+     -:    91:#define EvtRtxThreadDetach                  EventID(EventLevelAPI,    EvtRtxThreadNo, 0x11U)
+     -:    92:#define EvtRtxThreadDetached                EventID(EventLevelOp,     EvtRtxThreadNo, 0x12U)
+     -:    93:#define EvtRtxThreadJoin                    EventID(EventLevelAPI,    EvtRtxThreadNo, 0x13U)
+     -:    94:#define EvtRtxThreadJoinPending             EventID(EventLevelOp,     EvtRtxThreadNo, 0x14U)
+     -:    95:#define EvtRtxThreadJoined                  EventID(EventLevelOp,     EvtRtxThreadNo, 0x15U)
+     -:    96:#define EvtRtxThreadBlocked                 EventID(EventLevelDetail, EvtRtxThreadNo, 0x16U)
+     -:    97:#define EvtRtxThreadUnblocked               EventID(EventLevelDetail, EvtRtxThreadNo, 0x17U)
+     -:    98:#define EvtRtxThreadPreempted               EventID(EventLevelDetail, EvtRtxThreadNo, 0x18U)
+     -:    99:#define EvtRtxThreadSwitched                EventID(EventLevelOp,     EvtRtxThreadNo, 0x19U)
+     -:   100:#define EvtRtxThreadExit                    EventID(EventLevelAPI,    EvtRtxThreadNo, 0x1AU)
+     -:   101:#define EvtRtxThreadTerminate               EventID(EventLevelAPI,    EvtRtxThreadNo, 0x1BU)
+     -:   102:#define EvtRtxThreadDestroyed               EventID(EventLevelOp,     EvtRtxThreadNo, 0x1CU)
+     -:   103:#define EvtRtxThreadFeedWatchdog            EventID(EventLevelAPI,    EvtRtxThreadNo, 0x2EU)
+     -:   104:#define EvtRtxThreadFeedWatchdogDone        EventID(EventLevelOp,     EvtRtxThreadNo, 0x2FU)
+     -:   105:#define EvtRtxThreadProtectPrivileged       EventID(EventLevelAPI,    EvtRtxThreadNo, 0x32U)
+     -:   106:#define EvtRtxThreadPrivilegedProtected     EventID(EventLevelOp,     EvtRtxThreadNo, 0x33U)
+     -:   107:#define EvtRtxThreadGetCount                EventID(EventLevelAPI,    EvtRtxThreadNo, 0x1DU)
+     -:   108:#define EvtRtxThreadEnumerate               EventID(EventLevelAPI,    EvtRtxThreadNo, 0x1EU)
+     -:   109:#define EvtRtxThreadSuspendClass            EventID(EventLevelAPI,    EvtRtxThreadNo, 0x34U)
+     -:   110:#define EvtRtxThreadResumeClass             EventID(EventLevelAPI,    EvtRtxThreadNo, 0x35U)
+     -:   111:#define EvtRtxThreadTerminateZone           EventID(EventLevelAPI,    EvtRtxThreadNo, 0x36U)
+     -:   112:#define EvtRtxThreadWatchdogExpired         EventID(EventLevelError,  EvtRtxThreadNo, 0x37U)
+     -:   113:
+     -:   114:/// Event IDs for "RTX Thread Flags"
+     -:   115:#define EvtRtxThreadFlagsError              EventID(EventLevelError,  EvtRtxThreadFlagsNo, 0x00U)
+     -:   116:#define EvtRtxThreadFlagsSet                EventID(EventLevelAPI,    EvtRtxThreadFlagsNo, 0x01U)
+     -:   117:#define EvtRtxThreadFlagsSetDone            EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x02U)
+     -:   118:#define EvtRtxThreadFlagsClear              EventID(EventLevelAPI,    EvtRtxThreadFlagsNo, 0x03U)
+     -:   119:#define EvtRtxThreadFlagsClearDone          EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x04U)
+     -:   120:#define EvtRtxThreadFlagsGet                EventID(EventLevelAPI,    EvtRtxThreadFlagsNo, 0x05U)
+     -:   121:#define EvtRtxThreadFlagsWait               EventID(EventLevelAPI,    EvtRtxThreadFlagsNo, 0x06U)
+     -:   122:#define EvtRtxThreadFlagsWaitPending        EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x07U)
+     -:   123:#define EvtRtxThreadFlagsWaitTimeout        EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x08U)
+     -:   124:#define EvtRtxThreadFlagsWaitCompleted      EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x09U)
+     -:   125:#define EvtRtxThreadFlagsWaitNotCompleted   EventID(EventLevelOp,     EvtRtxThreadFlagsNo, 0x0AU)
+     -:   126:
+     -:   127:/// Event IDs for "RTX Generic Wait"
+     -:   128:#define EvtRtxDelayError                    EventID(EventLevelError,  EvtRtxWaitNo, 0x00U)
+     -:   129:#define EvtRtxDelay                         EventID(EventLevelAPI,    EvtRtxWaitNo, 0x01U)
+     -:   130:#define EvtRtxDelayUntil                    EventID(EventLevelAPI,    EvtRtxWaitNo, 0x02U)
+     -:   131:#define EvtRtxDelayStarted                  EventID(EventLevelOp,     EvtRtxWaitNo, 0x03U)
+     -:   132:#define EvtRtxDelayUntilStarted             EventID(EventLevelOp,     EvtRtxWaitNo, 0x04U)
+     -:   133:#define EvtRtxDelayCompleted                EventID(EventLevelOp,     EvtRtxWaitNo, 0x05U)
+     -:   134:
+     -:   135:/// Event IDs for "RTX Timer"
+     -:   136:#define EvtRtxTimerError                    EventID(EventLevelError,  EvtRtxTimerNo, 0x00U)
+     -:   137:#define EvtRtxTimerCallback                 EventID(EventLevelOp,     EvtRtxTimerNo, 0x01U)
+     -:   138:#define EvtRtxTimerNew                      EventID(EventLevelAPI,    EvtRtxTimerNo, 0x02U)
+     -:   139:#define EvtRtxTimerCreated                  EventID(EventLevelOp,     EvtRtxTimerNo, 0x04U)
+     -:   140:#define EvtRtxTimerGetName                  EventID(EventLevelAPI,    EvtRtxTimerNo, 0x05U)
+     -:   141:#define EvtRtxTimerStart                    EventID(EventLevelAPI,    EvtRtxTimerNo, 0x07U)
+     -:   142:#define EvtRtxTimerStarted                  EventID(EventLevelOp,     EvtRtxTimerNo, 0x08U)
+     -:   143:#define EvtRtxTimerStop                     EventID(EventLevelAPI,    EvtRtxTimerNo, 0x09U)
+     -:   144:#define EvtRtxTimerStopped                  EventID(EventLevelOp,     EvtRtxTimerNo, 0x0AU)
+     -:   145:#define EvtRtxTimerIsRunning                EventID(EventLevelAPI,    EvtRtxTimerNo, 0x0BU)
+     -:   146:#define EvtRtxTimerDelete                   EventID(EventLevelAPI,    EvtRtxTimerNo, 0x0CU)
+     -:   147:#define EvtRtxTimerDestroyed                EventID(EventLevelOp,     EvtRtxTimerNo, 0x0DU)
+     -:   148:
+     -:   149:/// Event IDs for "RTX Event Flags"
+     -:   150:#define EvtRtxEventFlagsError               EventID(EventLevelError,  EvtRtxEventFlagsNo, 0x00U)
+     -:   151:#define EvtRtxEventFlagsNew                 EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x01U)
+     -:   152:#define EvtRtxEventFlagsCreated             EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x03U)
+     -:   153:#define EvtRtxEventFlagsGetName             EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x04U)
+     -:   154:#define EvtRtxEventFlagsSet                 EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x06U)
+     -:   155:#define EvtRtxEventFlagsSetDone             EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x07U)
+     -:   156:#define EvtRtxEventFlagsClear               EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x08U)
+     -:   157:#define EvtRtxEventFlagsClearDone           EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x09U)
+     -:   158:#define EvtRtxEventFlagsGet                 EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x0AU)
+     -:   159:#define EvtRtxEventFlagsWait                EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x0BU)
+     -:   160:#define EvtRtxEventFlagsWaitPending         EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x0CU)
+     -:   161:#define EvtRtxEventFlagsWaitTimeout         EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x0DU)
+     -:   162:#define EvtRtxEventFlagsWaitCompleted       EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x0EU)
+     -:   163:#define EvtRtxEventFlagsWaitNotCompleted    EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x0FU)
+     -:   164:#define EvtRtxEventFlagsDelete              EventID(EventLevelAPI,    EvtRtxEventFlagsNo, 0x10U)
+     -:   165:#define EvtRtxEventFlagsDestroyed           EventID(EventLevelOp,     EvtRtxEventFlagsNo, 0x11U)
+     -:   166:
+     -:   167:/// Event IDs for "RTX Mutex"
+     -:   168:#define EvtRtxMutexError                    EventID(EventLevelError,  EvtRtxMutexNo, 0x00U)
+     -:   169:#define EvtRtxMutexNew                      EventID(EventLevelAPI,    EvtRtxMutexNo, 0x01U)
+     -:   170:#define EvtRtxMutexCreated                  EventID(EventLevelOp,     EvtRtxMutexNo, 0x03U)
+     -:   171:#define EvtRtxMutexGetName                  EventID(EventLevelAPI,    EvtRtxMutexNo, 0x04U)
+     -:   172:#define EvtRtxMutexAcquire                  EventID(EventLevelAPI,    EvtRtxMutexNo, 0x06U)
+     -:   173:#define EvtRtxMutexAcquirePending           EventID(EventLevelOp,     EvtRtxMutexNo, 0x07U)
+     -:   174:#define EvtRtxMutexAcquireTimeout           EventID(EventLevelOp,     EvtRtxMutexNo, 0x08U)
+     -:   175:#define EvtRtxMutexAcquired                 EventID(EventLevelOp,     EvtRtxMutexNo, 0x09U)
+     -:   176:#define EvtRtxMutexNotAcquired              EventID(EventLevelOp,     EvtRtxMutexNo, 0x0AU)
+     -:   177:#define EvtRtxMutexRelease                  EventID(EventLevelAPI,    EvtRtxMutexNo, 0x0BU)
+     -:   178:#define EvtRtxMutexReleased                 EventID(EventLevelOp,     EvtRtxMutexNo, 0x0CU)
+     -:   179:#define EvtRtxMutexGetOwner                 EventID(EventLevelAPI,    EvtRtxMutexNo, 0x0DU)
+     -:   180:#define EvtRtxMutexDelete                   EventID(EventLevelAPI,    EvtRtxMutexNo, 0x0EU)
+     -:   181:#define EvtRtxMutexDestroyed                EventID(EventLevelOp,     EvtRtxMutexNo, 0x0FU)
+     -:   182:
+     -:   183:/// Event IDs for "RTX Semaphore"
+     -:   184:#define EvtRtxSemaphoreError                EventID(EventLevelError,  EvtRtxSemaphoreNo, 0x00U)
+     -:   185:#define EvtRtxSemaphoreNew                  EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x01U)
+     -:   186:#define EvtRtxSemaphoreCreated              EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x03U)
+     -:   187:#define EvtRtxSemaphoreGetName              EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x04U)
+     -:   188:#define EvtRtxSemaphoreAcquire              EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x06U)
+     -:   189:#define EvtRtxSemaphoreAcquirePending       EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x07U)
+     -:   190:#define EvtRtxSemaphoreAcquireTimeout       EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x08U)
+     -:   191:#define EvtRtxSemaphoreAcquired             EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x09U)
+     -:   192:#define EvtRtxSemaphoreNotAcquired          EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x0AU)
+     -:   193:#define EvtRtxSemaphoreRelease              EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x0BU)
+     -:   194:#define EvtRtxSemaphoreReleased             EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x0CU)
+     -:   195:#define EvtRtxSemaphoreGetCount             EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x0DU)
+     -:   196:#define EvtRtxSemaphoreDelete               EventID(EventLevelAPI,    EvtRtxSemaphoreNo, 0x0EU)
+     -:   197:#define EvtRtxSemaphoreDestroyed            EventID(EventLevelOp,     EvtRtxSemaphoreNo, 0x0FU)
+     -:   198:
+     -:   199:/// Event IDs for "RTX Memory Pool"
+     -:   200:#define EvtRtxMemoryPoolError               EventID(EventLevelError,  EvtRtxMemoryPoolNo, 0x00U)
+     -:   201:#define EvtRtxMemoryPoolNew                 EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x01U)
+     -:   202:#define EvtRtxMemoryPoolCreated             EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x03U)
+     -:   203:#define EvtRtxMemoryPoolGetName             EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x04U)
+     -:   204:#define EvtRtxMemoryPoolAlloc               EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x06U)
+     -:   205:#define EvtRtxMemoryPoolAllocPending        EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x07U)
+     -:   206:#define EvtRtxMemoryPoolAllocTimeout        EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x08U)
+     -:   207:#define EvtRtxMemoryPoolAllocated           EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x09U)
+     -:   208:#define EvtRtxMemoryPoolAllocFailed         EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x0AU)
+     -:   209:#define EvtRtxMemoryPoolFree                EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x0BU)
+     -:   210:#define EvtRtxMemoryPoolDeallocated         EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x0CU)
+     -:   211:#define EvtRtxMemoryPoolFreeFailed          EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x0DU)
+     -:   212:#define EvtRtxMemoryPoolGetCapacity         EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x0EU)
+     -:   213:#define EvtRtxMemoryPoolGetBlockSize        EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x0FU)
+     -:   214:#define EvtRtxMemoryPoolGetCount            EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x10U)
+     -:   215:#define EvtRtxMemoryPoolGetSpace            EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x11U)
+     -:   216:#define EvtRtxMemoryPoolDelete              EventID(EventLevelAPI,    EvtRtxMemoryPoolNo, 0x12U)
+     -:   217:#define EvtRtxMemoryPoolDestroyed           EventID(EventLevelOp,     EvtRtxMemoryPoolNo, 0x13U)
+     -:   218:
+     -:   219:/// Event IDs for "RTX Message Queue"
+     -:   220:#define EvtRtxMessageQueueError             EventID(EventLevelError,  EvtRtxMessageQueueNo, 0x00U)
+     -:   221:#define EvtRtxMessageQueueNew               EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x01U)
+     -:   222:#define EvtRtxMessageQueueCreated           EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x03U)
+     -:   223:#define EvtRtxMessageQueueGetName           EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x04U)
+     -:   224:#define EvtRtxMessageQueuePut               EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x06U)
+     -:   225:#define EvtRtxMessageQueuePutPending        EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x07U)
+     -:   226:#define EvtRtxMessageQueuePutTimeout        EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x08U)
+     -:   227:#define EvtRtxMessageQueueInsertPending     EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x09U)
+     -:   228:#define EvtRtxMessageQueueInserted          EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x0AU)
+     -:   229:#define EvtRtxMessageQueueNotInserted       EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x0BU)
+     -:   230:#define EvtRtxMessageQueueGet               EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x0CU)
+     -:   231:#define EvtRtxMessageQueueGetPending        EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x0DU)
+     -:   232:#define EvtRtxMessageQueueGetTimeout        EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x0EU)
+     -:   233:#define EvtRtxMessageQueueRetrieved         EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x0FU)
+     -:   234:#define EvtRtxMessageQueueNotRetrieved      EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x10U)
+     -:   235:#define EvtRtxMessageQueueGetCapacity       EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x11U)
+     -:   236:#define EvtRtxMessageQueueGetMsgSize        EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x12U)
+     -:   237:#define EvtRtxMessageQueueGetCount          EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x13U)
+     -:   238:#define EvtRtxMessageQueueGetSpace          EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x14U)
+     -:   239:#define EvtRtxMessageQueueReset             EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x15U)
+     -:   240:#define EvtRtxMessageQueueResetDone         EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x16U)
+     -:   241:#define EvtRtxMessageQueueDelete            EventID(EventLevelAPI,    EvtRtxMessageQueueNo, 0x17U)
+     -:   242:#define EvtRtxMessageQueueDestroyed         EventID(EventLevelOp,     EvtRtxMessageQueueNo, 0x18U)
+     -:   243:
+     -:   244:#endif  // RTE_CMSIS_View_EventRecorder
+     -:   245:
+     -:   246://lint -esym(522, EvrRtx*) "Functions 'EvrRtx*' can be overridden (do not lack side-effects)"
+     -:   247:
+     -:   248:
+     -:   249://  ==== Memory Events ====
+     -:   250:
+     -:   251:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_INIT_DISABLE))
+     -:   252:__WEAK void EvrRtxMemoryInit (void *mem, uint32_t size, uint32_t result) {
+     -:   253:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   254:  (void)EventRecord4(EvtRtxMemoryInit, (uint32_t)mem, size, result, 0U);
+     -:   255:#else
+     -:   256:  (void)mem;
+     -:   257:  (void)size;
+     -:   258:  (void)result;
+     -:   259:#endif
+     4:   260:}
+     -:   261:#endif
+     -:   262:
+     -:   263:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_ALLOC_DISABLE))
+     -:   264:__WEAK void EvrRtxMemoryAlloc (void *mem, uint32_t size, uint32_t type, void *block) {
+     -:   265:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   266:  (void)EventRecord4(EvtRtxMemoryAlloc, (uint32_t)mem, size, type, (uint32_t)block);
+     -:   267:#else
+     -:   268:  (void)mem;
+     -:   269:  (void)size;
+     -:   270:  (void)type;
+     -:   271:  (void)block;
+     -:   272:#endif
+     7:   273:}
+     -:   274:#endif
+     -:   275:
+     -:   276:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_FREE_DISABLE))
+     -:   277:__WEAK void EvrRtxMemoryFree (void *mem, void *block, uint32_t result) {
+     -:   278:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   279:  (void)EventRecord4(EvtRtxMemoryFree, (uint32_t)mem, (uint32_t)block, result, 0U);
+     -:   280:#else
+     -:   281:  (void)mem;
+     -:   282:  (void)block;
+     -:   283:  (void)result;
+     -:   284:#endif
+     2:   285:}
+     -:   286:#endif
+     -:   287:
+     -:   288:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_BLOCK_INIT_DISABLE))
+     -:   289:__WEAK void EvrRtxMemoryBlockInit (osRtxMpInfo_t *mp_info, uint32_t block_count, uint32_t block_size, void *block_mem) {
+     -:   290:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   291:  (void)EventRecord4(EvtRtxMemoryBlockInit, (uint32_t)mp_info, block_count, block_size, (uint32_t)block_mem);
+     -:   292:#else
+     -:   293:  (void)mp_info;
+     -:   294:  (void)block_count;
+     -:   295:  (void)block_size;
+     -:   296:  (void)block_mem;
+     -:   297:#endif
+     1:   298:}
+     -:   299:#endif
+     -:   300:
+     -:   301:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_BLOCK_ALLOC_DISABLE))
+     -:   302:__WEAK void EvrRtxMemoryBlockAlloc (osRtxMpInfo_t *mp_info, void *block) {
+     -:   303:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   304:  (void)EventRecord2(EvtRtxMemoryBlockAlloc, (uint32_t)mp_info, (uint32_t)block);
+     -:   305:#else
+     -:   306:  (void)mp_info;
+     -:   307:  (void)block;
+     -:   308:#endif
+ #####:   309:}
+     -:   310:#endif
+     -:   311:
+     -:   312:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMORY != 0) && !defined(EVR_RTX_MEMORY_BLOCK_FREE_DISABLE))
+     -:   313:__WEAK void EvrRtxMemoryBlockFree (osRtxMpInfo_t *mp_info, void *block, int32_t status) {
+     -:   314:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   315:  (void)EventRecord4(EvtRtxMemoryBlockFree, (uint32_t)mp_info, (uint32_t)block, (uint32_t)status, 0U);
+     -:   316:#else
+     -:   317:  (void)mp_info;
+     -:   318:  (void)block;
+     -:   319:  (void)status;
+     -:   320:#endif
+ #####:   321:}
+     -:   322:#endif
+     -:   323:
+     -:   324:
+     -:   325://  ==== Kernel Events ====
+     -:   326:
+     -:   327:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_ERROR_DISABLE))
+     -:   328:__WEAK void EvrRtxKernelError (int32_t status) {
+     -:   329:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   330:  (void)EventRecord2(EvtRtxKernelError, (uint32_t)status, 0U); 
+     -:   331:#else
+     -:   332:  (void)status;
+     -:   333:#endif
+ #####:   334:}
+     -:   335:#endif
+     -:   336:
+     -:   337:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_INITIALIZE_DISABLE))
+     -:   338:__WEAK void EvrRtxKernelInitialize (void) {
+     -:   339:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   340:  (void)EventRecord2(EvtRtxKernelInitialize, 0U, 0U);
+     -:   341:#else
+     -:   342:#endif
+     2:   343:}
+     -:   344:#endif
+     -:   345:
+     -:   346:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_INITIALIZED_DISABLE))
+     -:   347:__WEAK void EvrRtxKernelInitialized (void) {
+     -:   348:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   349:  (void)EventRecord2(EvtRtxKernelInitialized, 0U, 0U);
+     -:   350:#else
+     -:   351:#endif
+     2:   352:}
+     -:   353:#endif
+     -:   354:
+     -:   355:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_INFO_DISABLE))
+     -:   356:__WEAK void EvrRtxKernelGetInfo (osVersion_t *version, char *id_buf, uint32_t id_size) {
+     -:   357:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   358:  (void)EventRecord4(EvtRtxKernelGetInfo, (uint32_t)version, (uint32_t)id_buf, id_size, 0U);
+     -:   359:#else
+     -:   360:  (void)version;
+     -:   361:  (void)id_buf;
+     -:   362:  (void)id_size;
+     -:   363:#endif
+ #####:   364:}
+     -:   365:#endif
+     -:   366:
+     -:   367:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_INFO_RETRIEVED_DISABLE))
+     -:   368:__WEAK void EvrRtxKernelInfoRetrieved (const osVersion_t *version, const char *id_buf, uint32_t id_size) {
+     -:   369:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   370:  if (version != NULL) {
+     -:   371:    (void)EventRecord2(EvtRtxKernelInfoRetrieved, version->api, version->kernel);
+     -:   372:  }
+     -:   373:  if (id_buf != NULL) {
+     -:   374:    (void)EventRecordData(EvtRtxKernelInfoRetrieved_Detail, id_buf, id_size);
+     -:   375:  }
+     -:   376:#else
+     -:   377:  (void)version;
+     -:   378:  (void)id_buf;
+     -:   379:  (void)id_size;
+     -:   380:#endif
+     -:   381:}
+     -:   382:#endif
+     -:   383:
+     -:   384:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_STATE_DISABLE))
+     -:   385:__WEAK void EvrRtxKernelGetState (osKernelState_t state) {
+     -:   386:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   387:  (void)EventRecord2(EvtRtxKernelGetState, (uint32_t)state, 0U);
+     -:   388:#else
+     -:   389:  (void)state;
+     -:   390:#endif
+    19:   391:}
+     -:   392:#endif
+     -:   393:
+     -:   394:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_START_DISABLE))
+     -:   395:__WEAK void EvrRtxKernelStart (void) {
+     -:   396:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   397:  (void)EventRecord2(EvtRtxKernelStart, 0U, 0U);
+     -:   398:#else
+     -:   399:#endif
+     1:   400:}
+     -:   401:#endif
+     -:   402:
+     -:   403:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_STARTED_DISABLE))
+     -:   404:__WEAK void EvrRtxKernelStarted (void) {
+     -:   405:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   406:  (void)EventRecord2(EvtRtxKernelStarted, 0U, 0U);
+     -:   407:#else
+     -:   408:#endif
+     1:   409:}
+     -:   410:#endif
+     -:   411:
+     -:   412:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_LOCK_DISABLE))
+     -:   413:__WEAK void EvrRtxKernelLock (void) {
+     -:   414:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   415:  (void)EventRecord2(EvtRtxKernelLock, 0U, 0U);
+     -:   416:#else
+     -:   417:#endif
+     -:   418:}
+     -:   419:#endif
+     -:   420:
+     -:   421:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_LOCKED_DISABLE))
+     -:   422:__WEAK void EvrRtxKernelLocked (int32_t lock) {
+     -:   423:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   424:  (void)EventRecord2(EvtRtxKernelLocked, (uint32_t)lock, 0U);
+     -:   425:#else
+     -:   426:  (void)lock;
+     -:   427:#endif
+     -:   428:}
+     -:   429:#endif
+     -:   430:
+     -:   431:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_UNLOCK_DISABLE))
+     -:   432:__WEAK void EvrRtxKernelUnlock (void) {
+     -:   433:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   434:  (void)EventRecord2(EvtRtxKernelUnlock, 0U, 0U);
+     -:   435:#else
+     -:   436:#endif
+     -:   437:}
+     -:   438:#endif
+     -:   439:
+     -:   440:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_UNLOCKED_DISABLE))
+     -:   441:__WEAK void EvrRtxKernelUnlocked (int32_t lock) {
+     -:   442:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   443:  (void)EventRecord2(EvtRtxKernelUnlocked, (uint32_t)lock, 0U);
+     -:   444:#else
+     -:   445:  (void)lock;
+     -:   446:#endif
+     -:   447:}
+     -:   448:#endif
+     -:   449:
+     -:   450:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_RESTORE_LOCK_DISABLE))
+     -:   451:__WEAK void EvrRtxKernelRestoreLock (int32_t lock) {
+     -:   452:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   453:  (void)EventRecord2(EvtRtxKernelRestoreLock, (uint32_t)lock, 0U);
+     -:   454:#else
+     -:   455:  (void)lock;
+     -:   456:#endif
+     -:   457:}
+     -:   458:#endif
+     -:   459:
+     -:   460:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_LOCK_RESTORED_DISABLE))
+     -:   461:__WEAK void EvrRtxKernelLockRestored (int32_t lock) {
+     -:   462:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   463:  (void)EventRecord2(EvtRtxKernelLockRestored, (uint32_t)lock, 0U);
+     -:   464:#else
+     -:   465:  (void)lock;
+     -:   466:#endif
+     -:   467:}
+     -:   468:#endif
+     -:   469:
+     -:   470:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_SUSPEND_DISABLE))
+     -:   471:__WEAK void EvrRtxKernelSuspend (void) {
+     -:   472:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   473:  (void)EventRecord2(EvtRtxKernelSuspend, 0U, 0U);
+     -:   474:#else
+     -:   475:#endif
+     -:   476:}
+     -:   477:#endif
+     -:   478:
+     -:   479:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_SUSPENDED_DISABLE))
+     -:   480:__WEAK void EvrRtxKernelSuspended (uint32_t sleep_ticks) {
+     -:   481:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   482:  (void)EventRecord2(EvtRtxKernelSuspended, sleep_ticks, 0U);
+     -:   483:#else
+     -:   484:  (void)sleep_ticks;
+     -:   485:#endif
+     -:   486:}
+     -:   487:#endif
+     -:   488:
+     -:   489:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_RESUME_DISABLE))
+     -:   490:__WEAK void EvrRtxKernelResume (uint32_t sleep_ticks) {
+     -:   491:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   492:  (void)EventRecord2(EvtRtxKernelResume, sleep_ticks, 0U);
+     -:   493:#else
+     -:   494:  (void)sleep_ticks;
+     -:   495:#endif
+     -:   496:}
+     -:   497:#endif
+     -:   498:
+     -:   499:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_RESUMED_DISABLE))
+     -:   500:__WEAK void EvrRtxKernelResumed (void) {
+     -:   501:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   502:  (void)EventRecord2(EvtRtxKernelResumed, 0U, 0U);
+     -:   503:#else
+     -:   504:#endif
+     -:   505:}
+     -:   506:#endif
+     -:   507:
+     -:   508:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_PROTECT_DISABLE))
+     -:   509:__WEAK void EvrRtxKernelProtect (uint32_t safety_class) {
+     -:   510:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   511:  (void)EventRecord2(EvtRtxKernelProtect, safety_class, 0U);
+     -:   512:#else
+     -:   513:  (void)safety_class;
+     -:   514:#endif
+     -:   515:}
+     -:   516:#endif
+     -:   517:
+     -:   518:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_PROTECTED_DISABLE))
+     -:   519:__WEAK void EvrRtxKernelProtected (void) {
+     -:   520:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   521:  (void)EventRecord2(EvtRtxKernelProtected, 0U, 0U);
+     -:   522:#endif
+     -:   523:}
+     -:   524:#endif
+     -:   525:
+     -:   526:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_TICK_COUNT_DISABLE))
+     -:   527:__WEAK void EvrRtxKernelGetTickCount (uint32_t count) {
+     -:   528:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   529:  (void)EventRecord2(EvtRtxKernelGetTickCount, count, 0U);
+     -:   530:#else
+     -:   531:  (void)count;
+     -:   532:#endif
+     -:   533:}
+     -:   534:#endif
+     -:   535:
+     -:   536:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_TICK_FREQ_DISABLE))
+     -:   537:__WEAK void EvrRtxKernelGetTickFreq (uint32_t freq) {
+     -:   538:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   539:  (void)EventRecord2(EvtRtxKernelGetTickFreq, freq, 0U);
+     -:   540:#else
+     -:   541:  (void)freq;
+     -:   542:#endif
+     -:   543:}
+     -:   544:#endif
+     -:   545:
+     -:   546:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_SYS_TIMER_COUNT_DISABLE))
+     -:   547:__WEAK void EvrRtxKernelGetSysTimerCount (uint32_t count) {
+     -:   548:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   549:  (void)EventRecord2(EvtRtxKernelGetSysTimerCount, count, 0U);
+     -:   550:#else
+     -:   551:  (void)count;
+     -:   552:#endif
+     -:   553:}
+     -:   554:#endif
+     -:   555:
+     -:   556:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_GET_SYS_TIMER_FREQ_DISABLE))
+     -:   557:__WEAK void EvrRtxKernelGetSysTimerFreq (uint32_t freq) {
+     -:   558:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   559:  (void)EventRecord2(EvtRtxKernelGetSysTimerFreq, freq, 0U);
+     -:   560:#else
+     -:   561:  (void)freq;
+     -:   562:#endif
+     -:   563:}
+     -:   564:#endif
+     -:   565:
+     -:   566:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_ERROR_NOTIFY_DISABLE))
+     -:   567:__WEAK void EvrRtxKernelErrorNotify (uint32_t code, void *object_id) {
+     -:   568:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   569:  (void)EventRecord2(EvtRtxKernelErrorNotify, code, (uint32_t)object_id);
+     -:   570:#else
+     -:   571:  (void)code;
+     -:   572:  (void)object_id;
+     -:   573:#endif
+ #####:   574:}
+     -:   575:#endif
+     -:   576:
+     -:   577:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_KERNEL != 0) && !defined(EVR_RTX_KERNEL_DESTROY_CLASS_DISABLE))
+     -:   578:__WEAK void EvrRtxKernelDestroyClass (uint32_t safety_class, uint32_t mode) {
+     -:   579:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   580:  (void)EventRecord2(EvtRtxKernelDestroyClass, safety_class, mode);
+     -:   581:#else
+     -:   582:  (void)safety_class;
+     -:   583:  (void)mode;
+     -:   584:#endif
+     -:   585:}
+     -:   586:#endif
+     -:   587:
+     -:   588:
+     -:   589://  ==== Thread Events ====
+     -:   590:
+     -:   591:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_ERROR_DISABLE))
+     -:   592:__WEAK void EvrRtxThreadError (osThreadId_t thread_id, int32_t status) {
+     -:   593:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   594:  (void)EventRecord2(EvtRtxThreadError, (uint32_t)thread_id, (uint32_t)status);
+     -:   595:#else
+     -:   596:  (void)thread_id;
+     -:   597:  (void)status;
+     -:   598:#endif
+ #####:   599:}
+     -:   600:#endif
+     -:   601:
+     -:   602:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_NEW_DISABLE))
+     -:   603:__WEAK void EvrRtxThreadNew (osThreadFunc_t func, void *argument, const osThreadAttr_t *attr) {
+     -:   604:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   605:  (void)EventRecord4(EvtRtxThreadNew, (uint32_t)func, (uint32_t)argument, (uint32_t)attr, 0U);
+     -:   606:#else
+     -:   607:  (void)func;
+     -:   608:  (void)argument;
+     -:   609:  (void)attr;
+     -:   610:#endif
+     1:   611:}
+     -:   612:#endif
+     -:   613:
+     -:   614:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_CREATED_DISABLE))
+     -:   615:__WEAK void EvrRtxThreadCreated (osThreadId_t thread_id, uint32_t thread_addr, const char *name) {
+     -:   616:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   617:  if (name != NULL) {
+     -:   618:    (void)EventRecord2(EvtRtxThreadCreated_Name, (uint32_t)thread_id, (uint32_t)name);
+     -:   619:  } else {
+     -:   620:    (void)EventRecord2(EvtRtxThreadCreated_Addr, (uint32_t)thread_id, thread_addr);
+     -:   621:  }
+     -:   622:#else
+     -:   623:  (void)thread_id;
+     -:   624:  (void)thread_addr;
+     -:   625:  (void)name;
+     -:   626:#endif
+     3:   627:}
+     -:   628:#endif
+     -:   629:
+     -:   630:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_NAME_DISABLE))
+     -:   631:__WEAK void EvrRtxThreadGetName (osThreadId_t thread_id, const char *name) {
+     -:   632:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   633:  (void)EventRecord2(EvtRtxThreadGetName, (uint32_t)thread_id, (uint32_t)name);
+     -:   634:#else
+     -:   635:  (void)thread_id;
+     -:   636:  (void)name;
+     -:   637:#endif
+     -:   638:}
+     -:   639:#endif
+     -:   640:
+     -:   641:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_CLASS_DISABLE))
+     -:   642:__WEAK void EvrRtxThreadGetClass (osThreadId_t thread_id, uint32_t safety_class) {
+     -:   643:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   644:  (void)EventRecord2(EvtRtxThreadGetClass, (uint32_t)thread_id, safety_class);
+     -:   645:#else
+     -:   646:  (void)thread_id;
+     -:   647:  (void)safety_class;
+     -:   648:#endif
+     -:   649:}
+     -:   650:#endif
+     -:   651:
+     -:   652:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_ZONE_DISABLE))
+     -:   653:__WEAK void EvrRtxThreadGetZone (osThreadId_t thread_id, uint32_t zone) {
+     -:   654:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   655:  (void)EventRecord2(EvtRtxThreadGetZone, (uint32_t)thread_id, zone);
+     -:   656:#else
+     -:   657:  (void)thread_id;
+     -:   658:  (void)zone;
+     -:   659:#endif
+     -:   660:}
+     -:   661:#endif
+     -:   662:
+     -:   663:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_ID_DISABLE))
+     -:   664:__WEAK void EvrRtxThreadGetId (osThreadId_t thread_id) {
+     -:   665:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   666:  (void)EventRecord2(EvtRtxThreadGetId, (uint32_t)thread_id, 0U);
+     -:   667:#else
+     -:   668:  (void)thread_id;
+     -:   669:#endif
+ #####:   670:}
+     -:   671:#endif
+     -:   672:
+     -:   673:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_STATE_DISABLE))
+     -:   674:__WEAK void EvrRtxThreadGetState (osThreadId_t thread_id, osThreadState_t state) {
+     -:   675:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   676:  (void)EventRecord2(EvtRtxThreadGetState, (uint32_t)thread_id, (uint32_t)state);
+     -:   677:#else
+     -:   678:  (void)thread_id;
+     -:   679:  (void)state;
+     -:   680:#endif
+     -:   681:}
+     -:   682:#endif
+     -:   683:
+     -:   684:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_STACK_SIZE_DISABLE))
+     -:   685:__WEAK void EvrRtxThreadGetStackSize (osThreadId_t thread_id, uint32_t stack_size) {
+     -:   686:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   687:  (void)EventRecord2(EvtRtxThreadGetStackSize, (uint32_t)thread_id, stack_size);
+     -:   688:#else
+     -:   689:  (void)thread_id;
+     -:   690:  (void)stack_size;
+     -:   691:#endif
+     -:   692:}
+     -:   693:#endif
+     -:   694:
+     -:   695:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_STACK_SPACE_DISABLE))
+     -:   696:__WEAK void EvrRtxThreadGetStackSpace (osThreadId_t thread_id, uint32_t stack_space) {
+     -:   697:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   698:  (void)EventRecord2(EvtRtxThreadGetStackSpace, (uint32_t)thread_id, stack_space);
+     -:   699:#else
+     -:   700:  (void)thread_id;
+     -:   701:  (void)stack_space;
+     -:   702:#endif
+     -:   703:}
+     -:   704:#endif
+     -:   705:
+     -:   706:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_SET_PRIORITY_DISABLE))
+     -:   707:__WEAK void EvrRtxThreadSetPriority (osThreadId_t thread_id, osPriority_t priority) {
+     -:   708:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   709:  (void)EventRecord2(EvtRtxThreadSetPriority, (uint32_t)thread_id, (uint32_t)priority);
+     -:   710:#else
+     -:   711:  (void)thread_id;
+     -:   712:  (void)priority;
+     -:   713:#endif
+     -:   714:}
+     -:   715:#endif
+     -:   716:
+     -:   717:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_PRIORITY_UPDATED_DISABLE))
+     -:   718:__WEAK void EvrRtxThreadPriorityUpdated (osThreadId_t thread_id, osPriority_t priority) {
+     -:   719:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   720:  (void)EventRecord2(EvtRtxThreadPriorityUpdated, (uint32_t)thread_id, (uint32_t)priority);
+     -:   721:#else
+     -:   722:  (void)thread_id;
+     -:   723:  (void)priority;
+     -:   724:#endif
+     -:   725:}
+     -:   726:#endif
+     -:   727:
+     -:   728:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_PRIORITY_DISABLE))
+     -:   729:__WEAK void EvrRtxThreadGetPriority (osThreadId_t thread_id, osPriority_t priority) {
+     -:   730:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   731:  (void)EventRecord2(EvtRtxThreadGetPriority, (uint32_t)thread_id, (uint32_t)priority);
+     -:   732:#else
+     -:   733:  (void)thread_id;
+     -:   734:  (void)priority;
+     -:   735:#endif
+     -:   736:}
+     -:   737:#endif
+     -:   738:
+     -:   739:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_YIELD_DISABLE))
+     -:   740:__WEAK void EvrRtxThreadYield (void) {
+     -:   741:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   742:  (void)EventRecord2(EvtRtxThreadYield, 0U, 0U);
+     -:   743:#else
+     -:   744:#endif
+     -:   745:}
+     -:   746:#endif
+     -:   747:
+     -:   748:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_SUSPEND_DISABLE))
+     -:   749:__WEAK void EvrRtxThreadSuspend (osThreadId_t thread_id) {
+     -:   750:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   751:  (void)EventRecord2(EvtRtxThreadSuspend, (uint32_t)thread_id, 0U);
+     -:   752:#else
+     -:   753:  (void)thread_id;
+     -:   754:#endif
+     -:   755:}
+     -:   756:#endif
+     -:   757:
+     -:   758:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_SUSPENDED_DISABLE))
+     -:   759:__WEAK void EvrRtxThreadSuspended (osThreadId_t thread_id) {
+     -:   760:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   761:  (void)EventRecord2(EvtRtxThreadSuspended, (uint32_t)thread_id, 0U);
+     -:   762:#else
+     -:   763:  (void)thread_id;
+     -:   764:#endif
+     -:   765:}
+     -:   766:#endif
+     -:   767:
+     -:   768:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_RESUME_DISABLE))
+     -:   769:__WEAK void EvrRtxThreadResume (osThreadId_t thread_id) {
+     -:   770:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   771:  (void)EventRecord2(EvtRtxThreadResume, (uint32_t)thread_id, 0U);
+     -:   772:#else
+     -:   773:  (void)thread_id;
+     -:   774:#endif
+     -:   775:}
+     -:   776:#endif
+     -:   777:
+     -:   778:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_RESUMED_DISABLE))
+     -:   779:__WEAK void EvrRtxThreadResumed (osThreadId_t thread_id) {
+     -:   780:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   781:  (void)EventRecord2(EvtRtxThreadResumed, (uint32_t)thread_id, 0U);
+     -:   782:#else
+     -:   783:  (void)thread_id;
+     -:   784:#endif
+     -:   785:}
+     -:   786:#endif
+     -:   787:
+     -:   788:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_DETACH_DISABLE))
+     -:   789:__WEAK void EvrRtxThreadDetach (osThreadId_t thread_id) {
+     -:   790:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   791:  (void)EventRecord2(EvtRtxThreadDetach, (uint32_t)thread_id, 0U);
+     -:   792:#else
+     -:   793:  (void)thread_id;
+     -:   794:#endif
+     -:   795:}
+     -:   796:#endif
+     -:   797:
+     -:   798:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_DETACHED_DISABLE))
+     -:   799:__WEAK void EvrRtxThreadDetached (osThreadId_t thread_id) {
+     -:   800:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   801:  (void)EventRecord2(EvtRtxThreadDetached, (uint32_t)thread_id, 0U);
+     -:   802:#else
+     -:   803:  (void)thread_id;
+     -:   804:#endif
+     -:   805:}
+     -:   806:#endif
+     -:   807:
+     -:   808:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_JOIN_DISABLE))
+     -:   809:__WEAK void EvrRtxThreadJoin (osThreadId_t thread_id) {
+     -:   810:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   811:  (void)EventRecord2(EvtRtxThreadJoin, (uint32_t)thread_id, 0U);
+     -:   812:#else
+     -:   813:  (void)thread_id;
+     -:   814:#endif
+     -:   815:}
+     -:   816:#endif
+     -:   817:
+     -:   818:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_JOIN_PENDING_DISABLE))
+     -:   819:__WEAK void EvrRtxThreadJoinPending (osThreadId_t thread_id) {
+     -:   820:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   821:  (void)EventRecord2(EvtRtxThreadJoinPending, (uint32_t)thread_id, 0U);
+     -:   822:#else
+     -:   823:  (void)thread_id;
+     -:   824:#endif
+     -:   825:}
+     -:   826:#endif
+     -:   827:
+     -:   828:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_JOINED_DISABLE))
+     -:   829:__WEAK void EvrRtxThreadJoined (osThreadId_t thread_id) {
+     -:   830:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   831:  (void)EventRecord2(EvtRtxThreadJoined, (uint32_t)thread_id, 0U);
+     -:   832:#else
+     -:   833:  (void)thread_id;
+     -:   834:#endif
+ #####:   835:}
+     -:   836:#endif
+     -:   837:
+     -:   838:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_BLOCKED_DISABLE))
+     -:   839:__WEAK void EvrRtxThreadBlocked (osThreadId_t thread_id, uint32_t timeout) {
+     -:   840:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   841:  (void)EventRecord2(EvtRtxThreadBlocked, (uint32_t)thread_id, timeout);
+     -:   842:#else
+     -:   843:  (void)thread_id;
+     -:   844:  (void)timeout;
+     -:   845:#endif
+     1:   846:}
+     -:   847:#endif
+     -:   848:
+     -:   849:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_UNBLOCKED_DISABLE))
+     -:   850:__WEAK void EvrRtxThreadUnblocked (osThreadId_t thread_id, uint32_t ret_val) {
+     -:   851:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   852:  (void)EventRecord2(EvtRtxThreadUnblocked, (uint32_t)thread_id, ret_val);
+     -:   853:#else
+     -:   854:  (void)thread_id;
+     -:   855:  (void)ret_val;
+     -:   856:#endif
+ #####:   857:}
+     -:   858:#endif
+     -:   859:
+     -:   860:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_PREEMPTED_DISABLE))
+     -:   861:__WEAK void EvrRtxThreadPreempted (osThreadId_t thread_id) {
+     -:   862:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   863:  (void)EventRecord2(EvtRtxThreadPreempted, (uint32_t)thread_id, 0U);
+     -:   864:#else
+     -:   865:  (void)thread_id;
+     -:   866:#endif
+ #####:   867:}
+     -:   868:#endif
+     -:   869:
+     -:   870:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_SWITCHED_DISABLE))
+     -:   871:__WEAK void EvrRtxThreadSwitched (osThreadId_t thread_id) {
+     -:   872:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   873:  (void)EventRecord2(EvtRtxThreadSwitched, (uint32_t)thread_id, 0U);
+     -:   874:#else
+     -:   875:  (void)thread_id;
+     -:   876:#endif
+     3:   877:}
+     -:   878:#endif
+     -:   879:
+     -:   880:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_EXIT_DISABLE))
+     -:   881:__WEAK void EvrRtxThreadExit (void) {
+     -:   882:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   883:  (void)EventRecord2(EvtRtxThreadExit, 0U, 0U);
+     -:   884:#else
+     -:   885:#endif
+     1:   886:}
+     -:   887:#endif
+     -:   888:
+     -:   889:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_TERMINATE_DISABLE))
+     -:   890:__WEAK void EvrRtxThreadTerminate (osThreadId_t thread_id) {
+     -:   891:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   892:  (void)EventRecord2(EvtRtxThreadTerminate, (uint32_t)thread_id, 0U);
+     -:   893:#else
+     -:   894:  (void)thread_id;
+     -:   895:#endif
+     -:   896:}
+     -:   897:#endif
+     -:   898:
+     -:   899:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_DESTROYED_DISABLE))
+     -:   900:__WEAK void EvrRtxThreadDestroyed (osThreadId_t thread_id) {
+     -:   901:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   902:  (void)EventRecord2(EvtRtxThreadDestroyed, (uint32_t)thread_id, 0U);
+     -:   903:#else
+     -:   904:  (void)thread_id;
+     -:   905:#endif
+     1:   906:}
+     -:   907:#endif
+     -:   908:
+     -:   909:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_FEED_WATCHDOG_DISABLE))
+     -:   910:__WEAK void EvrRtxThreadFeedWatchdog (uint32_t ticks) {
+     -:   911:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   912:  (void)EventRecord2(EvtRtxThreadFeedWatchdog, ticks, 0U);
+     -:   913:#else
+     -:   914:  (void)ticks;
+     -:   915:#endif
+     -:   916:}
+     -:   917:#endif
+     -:   918:
+     -:   919:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_FEED_WATCHDOG_DONE_DISABLE))
+     -:   920:__WEAK void EvrRtxThreadFeedWatchdogDone (void) {
+     -:   921:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   922:  (void)EventRecord2(EvtRtxThreadFeedWatchdogDone, 0U, 0U);
+     -:   923:#endif
+     -:   924:}
+     -:   925:#endif
+     -:   926:
+     -:   927:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_PROTECT_PRIVILEGED_DISABLE))
+     -:   928:__WEAK void EvrRtxThreadProtectPrivileged (void) {
+     -:   929:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   930:  (void)EventRecord2(EvtRtxThreadProtectPrivileged, 0U, 0U);
+     -:   931:#endif
+     -:   932:}
+     -:   933:#endif
+     -:   934:
+     -:   935:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_PRIVILEGED_PROTECTED_DISABLE))
+     -:   936:__WEAK void EvrRtxThreadPrivilegedProtected (void) {
+     -:   937:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   938:  (void)EventRecord2(EvtRtxThreadPrivilegedProtected, 0U, 0U);
+     -:   939:#endif
+     -:   940:}
+     -:   941:#endif
+     -:   942:
+     -:   943:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_GET_COUNT_DISABLE))
+     -:   944:__WEAK void EvrRtxThreadGetCount (uint32_t count) {
+     -:   945:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   946:  (void)EventRecord2(EvtRtxThreadGetCount, count, 0U);
+     -:   947:#else
+     -:   948:  (void)count;
+     -:   949:#endif
+     -:   950:}
+     -:   951:#endif
+     -:   952:
+     -:   953:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_ENUMERATE_DISABLE))
+     -:   954:__WEAK void EvrRtxThreadEnumerate (osThreadId_t *thread_array, uint32_t array_items, uint32_t count) {
+     -:   955:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   956:  (void)EventRecord4(EvtRtxThreadEnumerate, (uint32_t)thread_array, array_items, count, 0U);
+     -:   957:#else
+     -:   958:  (void)thread_array;
+     -:   959:  (void)array_items;
+     -:   960:  (void)count;
+     -:   961:#endif
+     -:   962:}
+     -:   963:#endif
+     -:   964:
+     -:   965:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_SUSPEND_CLASS_DISABLE))
+     -:   966:__WEAK void EvrRtxThreadSuspendClass (uint32_t safety_class, uint32_t mode) {
+     -:   967:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   968:  (void)EventRecord2(EvtRtxThreadSuspendClass, safety_class, (uint32_t)mode);
+     -:   969:#else
+     -:   970:  (void)safety_class;
+     -:   971:  (void)mode;
+     -:   972:#endif
+     -:   973:}
+     -:   974:#endif
+     -:   975:
+     -:   976:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_RESUME_CLASS_DISABLE))
+     -:   977:__WEAK void EvrRtxThreadResumeClass (uint32_t safety_class, uint32_t mode) {
+     -:   978:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   979:  (void)EventRecord2(EvtRtxThreadResumeClass, safety_class, (uint32_t)mode);
+     -:   980:#else
+     -:   981:  (void)safety_class;
+     -:   982:  (void)mode;
+     -:   983:#endif
+     -:   984:}
+     -:   985:#endif
+     -:   986:
+     -:   987:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_TERMINATE_ZONE_DISABLE))
+     -:   988:__WEAK void EvrRtxThreadTerminateZone (uint32_t zone) {
+     -:   989:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:   990:  (void)EventRecord2(EvtRtxThreadTerminateZone, zone, 0U);
+     -:   991:#else
+     -:   992:  (void)zone;
+     -:   993:#endif
+     -:   994:}
+     -:   995:#endif
+     -:   996:
+     -:   997:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THREAD != 0) && !defined(EVR_RTX_THREAD_WATCHDOG_EXPIRED_DISABLE))
+     -:   998:__WEAK void EvrRtxThreadWatchdogExpired (osThreadId_t thread_id) {
+     -:   999:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1000:  (void)EventRecord2(EvtRtxThreadWatchdogExpired, (uint32_t)thread_id, 0U);
+     -:  1001:#else
+     -:  1002:  (void)thread_id;
+     -:  1003:#endif
+     -:  1004:}
+     -:  1005:#endif
+     -:  1006:
+     -:  1007:
+     -:  1008://  ==== Thread Flags Events ====
+     -:  1009:
+     -:  1010:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_ERROR_DISABLE))
+     -:  1011:__WEAK void EvrRtxThreadFlagsError (osThreadId_t thread_id, int32_t status) {
+     -:  1012:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1013:  (void)EventRecord2(EvtRtxThreadFlagsError, (uint32_t)thread_id, (uint32_t)status);
+     -:  1014:#else
+     -:  1015:  (void)thread_id;
+     -:  1016:  (void)status;
+     -:  1017:#endif
+     -:  1018:}
+     -:  1019:#endif
+     -:  1020:
+     -:  1021:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_SET_DISABLE))
+     -:  1022:__WEAK void EvrRtxThreadFlagsSet (osThreadId_t thread_id, uint32_t flags) {
+     -:  1023:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1024:  (void)EventRecord2(EvtRtxThreadFlagsSet, (uint32_t)thread_id, flags);
+     -:  1025:#else
+     -:  1026:  (void)thread_id;
+     -:  1027:  (void)flags;
+     -:  1028:#endif
+     -:  1029:}
+     -:  1030:#endif
+     -:  1031:
+     -:  1032:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_SET_DONE_DISABLE))
+     -:  1033:__WEAK void EvrRtxThreadFlagsSetDone (osThreadId_t thread_id, uint32_t thread_flags) {
+     -:  1034:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1035:  (void)EventRecord2(EvtRtxThreadFlagsSetDone, (uint32_t)thread_id, thread_flags);
+     -:  1036:#else
+     -:  1037:  (void)thread_id;
+     -:  1038:  (void)thread_flags;
+     -:  1039:#endif
+     -:  1040:}
+     -:  1041:#endif
+     -:  1042:
+     -:  1043:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_CLEAR_DISABLE))
+     -:  1044:__WEAK void EvrRtxThreadFlagsClear (uint32_t flags) {
+     -:  1045:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1046:  (void)EventRecord2(EvtRtxThreadFlagsClear, flags, 0U);
+     -:  1047:#else
+     -:  1048:  (void)flags;
+     -:  1049:#endif
+     -:  1050:}
+     -:  1051:#endif
+     -:  1052:
+     -:  1053:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_CLEAR_DONE_DISABLE))
+     -:  1054:__WEAK void EvrRtxThreadFlagsClearDone (uint32_t thread_flags) {
+     -:  1055:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1056:  (void)EventRecord2(EvtRtxThreadFlagsClearDone, thread_flags, 0U);
+     -:  1057:#else
+     -:  1058:  (void)thread_flags;
+     -:  1059:#endif
+     -:  1060:}
+     -:  1061:#endif
+     -:  1062:
+     -:  1063:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_GET_DISABLE))
+     -:  1064:__WEAK void EvrRtxThreadFlagsGet (uint32_t thread_flags) {
+     -:  1065:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1066:  (void)EventRecord2(EvtRtxThreadFlagsGet, thread_flags, 0U);
+     -:  1067:#else
+     -:  1068:  (void)thread_flags;
+     -:  1069:#endif
+     -:  1070:}
+     -:  1071:#endif
+     -:  1072:
+     -:  1073:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_WAIT_DISABLE))
+     -:  1074:__WEAK void EvrRtxThreadFlagsWait (uint32_t flags, uint32_t options, uint32_t timeout) {
+     -:  1075:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1076:  (void)EventRecord4(EvtRtxThreadFlagsWait, flags, options, timeout, 0U);
+     -:  1077:#else
+     -:  1078:  (void)flags;
+     -:  1079:  (void)options;
+     -:  1080:  (void)timeout;
+     -:  1081:#endif
+     -:  1082:}
+     -:  1083:#endif
+     -:  1084:
+     -:  1085:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_WAIT_PENDING_DISABLE))
+     -:  1086:__WEAK void EvrRtxThreadFlagsWaitPending (uint32_t flags, uint32_t options, uint32_t timeout) {
+     -:  1087:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1088:  (void)EventRecord4(EvtRtxThreadFlagsWaitPending, flags, options, timeout, 0U);
+     -:  1089:#else
+     -:  1090:  (void)flags;
+     -:  1091:  (void)options;
+     -:  1092:  (void)timeout;
+     -:  1093:#endif
+     -:  1094:}
+     -:  1095:#endif
+     -:  1096:
+     -:  1097:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_WAIT_TIMEOUT_DISABLE))
+     -:  1098:__WEAK void EvrRtxThreadFlagsWaitTimeout (osThreadId_t thread_id) {
+     -:  1099:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1100:  (void)EventRecord2(EvtRtxThreadFlagsWaitTimeout, (uint32_t)thread_id, 0U);
+     -:  1101:#else
+     -:  1102:  (void)thread_id;
+     -:  1103:#endif
+ #####:  1104:}
+     -:  1105:#endif
+     -:  1106:
+     -:  1107:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_WAIT_COMPLETED_DISABLE))
+     -:  1108:__WEAK void EvrRtxThreadFlagsWaitCompleted (uint32_t flags, uint32_t options, uint32_t thread_flags, osThreadId_t thread_id) {
+     -:  1109:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1110:  (void)EventRecord4(EvtRtxThreadFlagsWaitCompleted, flags, options, thread_flags, (uint32_t)thread_id);
+     -:  1111:#else
+     -:  1112:  (void)flags;
+     -:  1113:  (void)options;
+     -:  1114:  (void)thread_flags;
+     -:  1115:  (void)thread_id;
+     -:  1116:#endif
+ #####:  1117:}
+     -:  1118:#endif
+     -:  1119:
+     -:  1120:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_THFLAGS != 0) && !defined(EVR_RTX_THREAD_FLAGS_WAIT_NOT_COMPLETED_DISABLE))
+     -:  1121:__WEAK void EvrRtxThreadFlagsWaitNotCompleted (uint32_t flags, uint32_t options) {
+     -:  1122:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1123:  (void)EventRecord2(EvtRtxThreadFlagsWaitNotCompleted, flags, options);
+     -:  1124:#else
+     -:  1125:  (void)flags;
+     -:  1126:  (void)options;
+     -:  1127:#endif
+     -:  1128:}
+     -:  1129:#endif
+     -:  1130:
+     -:  1131:
+     -:  1132://  ==== Generic Wait Events ====
+     -:  1133:
+     -:  1134:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_ERROR_DISABLE))
+     -:  1135:__WEAK void EvrRtxDelayError (int32_t status) {
+     -:  1136:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1137:  (void)EventRecord2(EvtRtxDelayError, (uint32_t)status, 0U);
+     -:  1138:#else
+     -:  1139:  (void)status;
+     -:  1140:#endif
+     -:  1141:}
+     -:  1142:#endif
+     -:  1143:
+     -:  1144:
+     -:  1145:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_DISABLE))
+     -:  1146:__WEAK void EvrRtxDelay (uint32_t ticks) {
+     -:  1147:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1148:  (void)EventRecord2(EvtRtxDelay, ticks, 0U);
+     -:  1149:#else
+     -:  1150:  (void)ticks;
+     -:  1151:#endif
+     -:  1152:}
+     -:  1153:#endif
+     -:  1154:
+     -:  1155:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_UNTIL_DISABLE))
+     -:  1156:__WEAK void EvrRtxDelayUntil (uint32_t ticks) {
+     -:  1157:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1158:  (void)EventRecord2(EvtRtxDelayUntil, ticks, 0U);
+     -:  1159:#else
+     -:  1160:  (void)ticks;
+     -:  1161:#endif
+     -:  1162:}
+     -:  1163:#endif
+     -:  1164:
+     -:  1165:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_STARTED_DISABLE))
+     -:  1166:__WEAK void EvrRtxDelayStarted (uint32_t ticks) {
+     -:  1167:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1168:  (void)EventRecord2(EvtRtxDelayStarted, ticks, 0U);
+     -:  1169:#else
+     -:  1170:  (void)ticks;
+     -:  1171:#endif
+     -:  1172:}
+     -:  1173:#endif
+     -:  1174:
+     -:  1175:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_UNTIL_STARTED_DISABLE))
+     -:  1176:__WEAK void EvrRtxDelayUntilStarted (uint32_t ticks) {
+     -:  1177:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1178:  (void)EventRecord2(EvtRtxDelayUntilStarted, ticks, 0U);
+     -:  1179:#else
+     -:  1180:  (void)ticks;
+     -:  1181:#endif
+     -:  1182:}
+     -:  1183:#endif
+     -:  1184:
+     -:  1185:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_WAIT != 0) && !defined(EVR_RTX_DELAY_COMPLETED_DISABLE))
+     -:  1186:__WEAK void EvrRtxDelayCompleted (osThreadId_t thread_id) {
+     -:  1187:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1188:  (void)EventRecord2(EvtRtxDelayCompleted, (uint32_t)thread_id, 0U);
+     -:  1189:#else
+     -:  1190:  (void)thread_id;
+     -:  1191:#endif
+ #####:  1192:}
+     -:  1193:#endif
+     -:  1194:
+     -:  1195:
+     -:  1196://  ==== Timer Events ====
+     -:  1197:
+     -:  1198:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_ERROR_DISABLE))
+     -:  1199:__WEAK void EvrRtxTimerError (osTimerId_t timer_id, int32_t status) {
+     -:  1200:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1201:  (void)EventRecord2(EvtRtxTimerError, (uint32_t)timer_id, (uint32_t)status);
+     -:  1202:#else
+     -:  1203:  (void)timer_id;
+     -:  1204:  (void)status;
+     -:  1205:#endif
+     -:  1206:}
+     -:  1207:#endif
+     -:  1208:
+     -:  1209:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_CALLBACK_DISABLE))
+     -:  1210:__WEAK void EvrRtxTimerCallback (osTimerFunc_t func, void *argument) {
+     -:  1211:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1212:  (void)EventRecord2(EvtRtxTimerCallback, (uint32_t)func, (uint32_t)argument);
+     -:  1213:#else
+     -:  1214:  (void)func;
+     -:  1215:  (void)argument;
+     -:  1216:#endif
+ #####:  1217:}
+     -:  1218:#endif
+     -:  1219:
+     -:  1220:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_NEW_DISABLE))
+     -:  1221:__WEAK void EvrRtxTimerNew (osTimerFunc_t func, osTimerType_t type, void *argument, const osTimerAttr_t *attr) {
+     -:  1222:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1223:  (void)EventRecord4(EvtRtxTimerNew, (uint32_t)func, (uint32_t)type, (uint32_t)argument, (uint32_t)attr);
+     -:  1224:#else
+     -:  1225:  (void)func;
+     -:  1226:  (void)type;
+     -:  1227:  (void)argument;
+     -:  1228:  (void)attr;
+     -:  1229:#endif
+     -:  1230:}
+     -:  1231:#endif
+     -:  1232:
+     -:  1233:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_CREATED_DISABLE))
+     -:  1234:__WEAK void EvrRtxTimerCreated (osTimerId_t timer_id, const char *name) {
+     -:  1235:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1236:  (void)EventRecord2(EvtRtxTimerCreated, (uint32_t)timer_id, (uint32_t)name);
+     -:  1237:#else
+     -:  1238:  (void)timer_id;
+     -:  1239:  (void)name;
+     -:  1240:#endif
+     -:  1241:}
+     -:  1242:#endif
+     -:  1243:
+     -:  1244:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_GET_NAME_DISABLE))
+     -:  1245:__WEAK void EvrRtxTimerGetName (osTimerId_t timer_id, const char *name) {
+     -:  1246:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1247:  (void)EventRecord2(EvtRtxTimerGetName, (uint32_t)timer_id, (uint32_t)name);
+     -:  1248:#else
+     -:  1249:  (void)timer_id;
+     -:  1250:  (void)name;
+     -:  1251:#endif
+     -:  1252:}
+     -:  1253:#endif
+     -:  1254:
+     -:  1255:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_START_DISABLE))
+     -:  1256:__WEAK void EvrRtxTimerStart (osTimerId_t timer_id, uint32_t ticks) {
+     -:  1257:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1258:  (void)EventRecord2(EvtRtxTimerStart, (uint32_t)timer_id, ticks);
+     -:  1259:#else
+     -:  1260:  (void)timer_id;
+     -:  1261:  (void)ticks;
+     -:  1262:#endif
+     -:  1263:}
+     -:  1264:#endif
+     -:  1265:
+     -:  1266:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_STARTED_DISABLE))
+     -:  1267:__WEAK void EvrRtxTimerStarted (osTimerId_t timer_id) {
+     -:  1268:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1269:  (void)EventRecord2(EvtRtxTimerStarted, (uint32_t)timer_id, 0U);
+     -:  1270:#else
+     -:  1271:  (void)timer_id;
+     -:  1272:#endif
+     -:  1273:}
+     -:  1274:#endif
+     -:  1275:
+     -:  1276:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_STOP_DISABLE))
+     -:  1277:__WEAK void EvrRtxTimerStop (osTimerId_t timer_id) {
+     -:  1278:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1279:  (void)EventRecord2(EvtRtxTimerStop, (uint32_t)timer_id, 0U);
+     -:  1280:#else
+     -:  1281:  (void)timer_id;
+     -:  1282:#endif
+     -:  1283:}
+     -:  1284:#endif
+     -:  1285:
+     -:  1286:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_STOPPED_DISABLE))
+     -:  1287:__WEAK void EvrRtxTimerStopped (osTimerId_t timer_id) {
+     -:  1288:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1289:  (void)EventRecord2(EvtRtxTimerStopped, (uint32_t)timer_id, 0U);
+     -:  1290:#else
+     -:  1291:  (void)timer_id;
+     -:  1292:#endif
+     -:  1293:}
+     -:  1294:#endif
+     -:  1295:
+     -:  1296:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_IS_RUNNING_DISABLE))
+     -:  1297:__WEAK void EvrRtxTimerIsRunning (osTimerId_t timer_id, uint32_t running) {
+     -:  1298:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1299:  (void)EventRecord2(EvtRtxTimerIsRunning, (uint32_t)timer_id, running);
+     -:  1300:#else
+     -:  1301:  (void)timer_id;
+     -:  1302:  (void)running;
+     -:  1303:#endif
+     -:  1304:}
+     -:  1305:#endif
+     -:  1306:
+     -:  1307:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_DELETE_DISABLE))
+     -:  1308:__WEAK void EvrRtxTimerDelete (osTimerId_t timer_id) {
+     -:  1309:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1310:  (void)EventRecord2(EvtRtxTimerDelete, (uint32_t)timer_id, 0U);
+     -:  1311:#else
+     -:  1312:  (void)timer_id;
+     -:  1313:#endif
+     -:  1314:}
+     -:  1315:#endif
+     -:  1316:
+     -:  1317:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_TIMER != 0) && !defined(EVR_RTX_TIMER_DESTROYED_DISABLE))
+     -:  1318:__WEAK void EvrRtxTimerDestroyed (osTimerId_t timer_id) {
+     -:  1319:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1320:  (void)EventRecord2(EvtRtxTimerDestroyed, (uint32_t)timer_id, 0U);
+     -:  1321:#else
+     -:  1322:  (void)timer_id;
+     -:  1323:#endif
+     -:  1324:}
+     -:  1325:#endif
+     -:  1326:
+     -:  1327:
+     -:  1328://  ==== Event Flags Events ====
+     -:  1329:
+     -:  1330:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_ERROR_DISABLE))
+     -:  1331:__WEAK void EvrRtxEventFlagsError (osEventFlagsId_t ef_id, int32_t status) {
+     -:  1332:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1333:  (void)EventRecord2(EvtRtxEventFlagsError, (uint32_t)ef_id, (uint32_t)status);
+     -:  1334:#else
+     -:  1335:  (void)ef_id;
+     -:  1336:  (void)status;
+     -:  1337:#endif
+     -:  1338:}
+     -:  1339:#endif
+     -:  1340:
+     -:  1341:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_NEW_DISABLE))
+     -:  1342:__WEAK void EvrRtxEventFlagsNew (const osEventFlagsAttr_t *attr) {
+     -:  1343:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1344:  (void)EventRecord2(EvtRtxEventFlagsNew, (uint32_t)attr, 0U);
+     -:  1345:#else
+     -:  1346:  (void)attr;
+     -:  1347:#endif
+     -:  1348:}
+     -:  1349:#endif
+     -:  1350:
+     -:  1351:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_CREATED_DISABLE))
+     -:  1352:__WEAK void EvrRtxEventFlagsCreated (osEventFlagsId_t ef_id, const char *name) {
+     -:  1353:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1354:  (void)EventRecord2(EvtRtxEventFlagsCreated, (uint32_t)ef_id, (uint32_t)name);
+     -:  1355:#else
+     -:  1356:  (void)ef_id;
+     -:  1357:  (void)name;
+     -:  1358:#endif
+     -:  1359:}
+     -:  1360:#endif
+     -:  1361:
+     -:  1362:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_GET_NAME_DISABLE))
+     -:  1363:__WEAK void EvrRtxEventFlagsGetName (osEventFlagsId_t ef_id, const char *name) {
+     -:  1364:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1365:  (void)EventRecord2(EvtRtxEventFlagsGetName, (uint32_t)ef_id, (uint32_t)name);
+     -:  1366:#else
+     -:  1367:  (void)ef_id;
+     -:  1368:  (void)name;
+     -:  1369:#endif
+     -:  1370:}
+     -:  1371:#endif
+     -:  1372:
+     -:  1373:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_SET_DISABLE))
+     -:  1374:__WEAK void EvrRtxEventFlagsSet (osEventFlagsId_t ef_id, uint32_t flags) {
+     -:  1375:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1376:  (void)EventRecord2(EvtRtxEventFlagsSet, (uint32_t)ef_id, flags);
+     -:  1377:#else
+     -:  1378:  (void)ef_id;
+     -:  1379:  (void)flags;
+     -:  1380:#endif
+     -:  1381:}
+     -:  1382:#endif
+     -:  1383:
+     -:  1384:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_SET_DONE_DISABLE))
+     -:  1385:__WEAK void EvrRtxEventFlagsSetDone (osEventFlagsId_t ef_id, uint32_t event_flags) {
+     -:  1386:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1387:  (void)EventRecord2(EvtRtxEventFlagsSetDone, (uint32_t)ef_id, event_flags);
+     -:  1388:#else
+     -:  1389:  (void)ef_id;
+     -:  1390:  (void)event_flags;
+     -:  1391:#endif
+     -:  1392:}
+     -:  1393:#endif
+     -:  1394:
+     -:  1395:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_CLEAR_DISABLE))
+     -:  1396:__WEAK void EvrRtxEventFlagsClear (osEventFlagsId_t ef_id, uint32_t flags) {
+     -:  1397:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1398:  (void)EventRecord2(EvtRtxEventFlagsClear, (uint32_t)ef_id, flags);
+     -:  1399:#else
+     -:  1400:  (void)ef_id;
+     -:  1401:  (void)flags;
+     -:  1402:#endif
+     -:  1403:}
+     -:  1404:#endif
+     -:  1405:
+     -:  1406:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_CLEAR_DONE_DISABLE))
+     -:  1407:__WEAK void EvrRtxEventFlagsClearDone (osEventFlagsId_t ef_id, uint32_t event_flags) {
+     -:  1408:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1409:  (void)EventRecord2(EvtRtxEventFlagsClearDone, (uint32_t)ef_id, event_flags);
+     -:  1410:#else
+     -:  1411:  (void)ef_id;
+     -:  1412:  (void)event_flags;
+     -:  1413:#endif
+     -:  1414:}
+     -:  1415:#endif
+     -:  1416:
+     -:  1417:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_GET_DISABLE))
+     -:  1418:__WEAK void EvrRtxEventFlagsGet (osEventFlagsId_t ef_id, uint32_t event_flags) {
+     -:  1419:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1420:  (void)EventRecord2(EvtRtxEventFlagsGet, (uint32_t)ef_id, event_flags);
+     -:  1421:#else
+     -:  1422:  (void)ef_id;
+     -:  1423:  (void)event_flags;
+     -:  1424:#endif
+     -:  1425:}
+     -:  1426:#endif
+     -:  1427:
+     -:  1428:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_WAIT_DISABLE))
+     -:  1429:__WEAK void EvrRtxEventFlagsWait (osEventFlagsId_t ef_id, uint32_t flags, uint32_t options, uint32_t timeout) {
+     -:  1430:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1431:  (void)EventRecord4(EvtRtxEventFlagsWait, (uint32_t)ef_id, flags, options, timeout);
+     -:  1432:#else
+     -:  1433:  (void)ef_id;
+     -:  1434:  (void)flags;
+     -:  1435:  (void)options;
+     -:  1436:  (void)timeout;
+     -:  1437:#endif
+     -:  1438:}
+     -:  1439:#endif
+     -:  1440:
+     -:  1441:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_WAIT_PENDING_DISABLE))
+     -:  1442:__WEAK void EvrRtxEventFlagsWaitPending (osEventFlagsId_t ef_id, uint32_t flags, uint32_t options, uint32_t timeout) {
+     -:  1443:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1444:  (void)EventRecord4(EvtRtxEventFlagsWaitPending, (uint32_t)ef_id, flags, options, timeout);
+     -:  1445:#else
+     -:  1446:  (void)ef_id;
+     -:  1447:  (void)flags;
+     -:  1448:  (void)options;
+     -:  1449:  (void)timeout;
+     -:  1450:#endif
+     -:  1451:}
+     -:  1452:#endif
+     -:  1453:
+     -:  1454:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_WAIT_TIMEOUT_DISABLE))
+     -:  1455:__WEAK void EvrRtxEventFlagsWaitTimeout (osEventFlagsId_t ef_id) {
+     -:  1456:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1457:  (void)EventRecord2(EvtRtxEventFlagsWaitTimeout, (uint32_t)ef_id, 0U);
+     -:  1458:#else
+     -:  1459:  (void)ef_id;
+     -:  1460:#endif
+ #####:  1461:}
+     -:  1462:#endif
+     -:  1463:
+     -:  1464:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_WAIT_COMPLETED_DISABLE))
+     -:  1465:__WEAK void EvrRtxEventFlagsWaitCompleted (osEventFlagsId_t ef_id, uint32_t flags, uint32_t options, uint32_t event_flags) {
+     -:  1466:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1467:  (void)EventRecord4(EvtRtxEventFlagsWaitCompleted, (uint32_t)ef_id, flags, options, event_flags);
+     -:  1468:#else
+     -:  1469:  (void)ef_id;
+     -:  1470:  (void)flags;
+     -:  1471:  (void)options;
+     -:  1472:  (void)event_flags;
+     -:  1473:#endif
+     -:  1474:}
+     -:  1475:#endif
+     -:  1476:
+     -:  1477:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_WAIT_NOT_COMPLETED_DISABLE))
+     -:  1478:__WEAK void EvrRtxEventFlagsWaitNotCompleted (osEventFlagsId_t ef_id, uint32_t flags, uint32_t options) {
+     -:  1479:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1480:  (void)EventRecord4(EvtRtxEventFlagsWaitNotCompleted, (uint32_t)ef_id, flags, options, 0U);
+     -:  1481:#else
+     -:  1482:  (void)ef_id;
+     -:  1483:  (void)flags;
+     -:  1484:  (void)options;
+     -:  1485:#endif
+     -:  1486:}
+     -:  1487:#endif
+     -:  1488:
+     -:  1489:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_DELETE_DISABLE))
+     -:  1490:__WEAK void EvrRtxEventFlagsDelete (osEventFlagsId_t ef_id) {
+     -:  1491:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1492:  (void)EventRecord2(EvtRtxEventFlagsDelete, (uint32_t)ef_id, 0U);
+     -:  1493:#else
+     -:  1494:  (void)ef_id;
+     -:  1495:#endif
+     -:  1496:}
+     -:  1497:#endif
+     -:  1498:
+     -:  1499:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_EVFLAGS != 0) && !defined(EVR_RTX_EVENT_FLAGS_DESTROYED_DISABLE))
+     -:  1500:__WEAK void EvrRtxEventFlagsDestroyed (osEventFlagsId_t ef_id) {
+     -:  1501:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1502:  (void)EventRecord2(EvtRtxEventFlagsDestroyed, (uint32_t)ef_id, 0U);
+     -:  1503:#else
+     -:  1504:  (void)ef_id;
+     -:  1505:#endif
+     -:  1506:}
+     -:  1507:#endif
+     -:  1508:
+     -:  1509:
+     -:  1510://  ==== Mutex Events ====
+     -:  1511:
+     -:  1512:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_ERROR_DISABLE))
+     -:  1513:__WEAK void EvrRtxMutexError (osMutexId_t mutex_id, int32_t status) {
+     -:  1514:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1515:  (void)EventRecord2(EvtRtxMutexError, (uint32_t)mutex_id, (uint32_t)status);
+     -:  1516:#else
+     -:  1517:  (void)mutex_id;
+     -:  1518:  (void)status;
+     -:  1519:#endif
+ #####:  1520:}
+     -:  1521:#endif
+     -:  1522:
+     -:  1523:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_NEW_DISABLE))
+     -:  1524:__WEAK void EvrRtxMutexNew (const osMutexAttr_t *attr) {
+     -:  1525:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1526:  (void)EventRecord2(EvtRtxMutexNew, (uint32_t)attr, 0U);
+     -:  1527:#else
+     -:  1528:  (void)attr;
+     -:  1529:#endif
+     5:  1530:}
+     -:  1531:#endif
+     -:  1532:
+     -:  1533:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_CREATED_DISABLE))
+     -:  1534:__WEAK void EvrRtxMutexCreated (osMutexId_t mutex_id, const char *name) {
+     -:  1535:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1536:  (void)EventRecord2(EvtRtxMutexCreated, (uint32_t)mutex_id, (uint32_t)name);
+     -:  1537:#else
+     -:  1538:  (void)mutex_id;
+     -:  1539:  (void)name;
+     -:  1540:#endif
+     5:  1541:}
+     -:  1542:#endif
+     -:  1543:
+     -:  1544:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_GET_NAME_DISABLE))
+     -:  1545:__WEAK void EvrRtxMutexGetName (osMutexId_t mutex_id, const char *name) {
+     -:  1546:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1547:  (void)EventRecord2(EvtRtxMutexGetName, (uint32_t)mutex_id, (uint32_t)name);
+     -:  1548:#else
+     -:  1549:  (void)mutex_id;
+     -:  1550:  (void)name;
+     -:  1551:#endif
+     -:  1552:}
+     -:  1553:#endif
+     -:  1554:
+     -:  1555:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_ACQUIRE_DISABLE))
+     -:  1556:__WEAK void EvrRtxMutexAcquire (osMutexId_t mutex_id, uint32_t timeout) {
+     -:  1557:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1558:  (void)EventRecord2(EvtRtxMutexAcquire, (uint32_t)mutex_id, timeout);
+     -:  1559:#else
+     -:  1560:  (void)mutex_id;
+     -:  1561:  (void)timeout;
+     -:  1562:#endif
+   443:  1563:}
+     -:  1564:#endif
+     -:  1565:
+     -:  1566:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_ACQUIRE_PENDING_DISABLE))
+     -:  1567:__WEAK void EvrRtxMutexAcquirePending (osMutexId_t mutex_id, uint32_t timeout) {
+     -:  1568:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1569:  (void)EventRecord2(EvtRtxMutexAcquirePending, (uint32_t)mutex_id, timeout);
+     -:  1570:#else
+     -:  1571:  (void)mutex_id;
+     -:  1572:  (void)timeout;
+     -:  1573:#endif
+ #####:  1574:}
+     -:  1575:#endif
+     -:  1576:
+     -:  1577:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_ACQUIRE_TIMEOUT_DISABLE))
+     -:  1578:__WEAK void EvrRtxMutexAcquireTimeout (osMutexId_t mutex_id) {
+     -:  1579:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1580:  (void)EventRecord2(EvtRtxMutexAcquireTimeout, (uint32_t)mutex_id, 0U);
+     -:  1581:#else
+     -:  1582:  (void)mutex_id;
+     -:  1583:#endif
+ #####:  1584:}
+     -:  1585:#endif
+     -:  1586:
+     -:  1587:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_ACQUIRED_DISABLE))
+     -:  1588:__WEAK void EvrRtxMutexAcquired (osMutexId_t mutex_id, uint32_t lock) {
+     -:  1589:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1590:  (void)EventRecord2(EvtRtxMutexAcquired, (uint32_t)mutex_id, lock);
+     -:  1591:#else
+     -:  1592:  (void)mutex_id;
+     -:  1593:  (void)lock;
+     -:  1594:#endif
+   443:  1595:}
+     -:  1596:#endif
+     -:  1597:
+     -:  1598:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_NOT_ACQUIRED_DISABLE))
+     -:  1599:__WEAK void EvrRtxMutexNotAcquired (osMutexId_t mutex_id) {
+     -:  1600:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1601:  (void)EventRecord2(EvtRtxMutexNotAcquired, (uint32_t)mutex_id, 0U);
+     -:  1602:#else
+     -:  1603:  (void)mutex_id;
+     -:  1604:#endif
+ #####:  1605:}
+     -:  1606:#endif
+     -:  1607:
+     -:  1608:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_RELEASE_DISABLE))
+     -:  1609:__WEAK void EvrRtxMutexRelease (osMutexId_t mutex_id) {
+     -:  1610:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1611:  (void)EventRecord2(EvtRtxMutexRelease, (uint32_t)mutex_id, 0U);
+     -:  1612:#else
+     -:  1613:  (void)mutex_id;
+     -:  1614:#endif
+   443:  1615:}
+     -:  1616:#endif
+     -:  1617:
+     -:  1618:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_RELEASED_DISABLE))
+     -:  1619:__WEAK void EvrRtxMutexReleased (osMutexId_t mutex_id, uint32_t lock) {
+     -:  1620:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1621:  (void)EventRecord2(EvtRtxMutexReleased, (uint32_t)mutex_id, lock);
+     -:  1622:#else
+     -:  1623:  (void)mutex_id;
+     -:  1624:  (void)lock;
+     -:  1625:#endif
+   443:  1626:}
+     -:  1627:#endif
+     -:  1628:
+     -:  1629:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_GET_OWNER_DISABLE))
+     -:  1630:__WEAK void EvrRtxMutexGetOwner (osMutexId_t mutex_id, osThreadId_t thread_id) {
+     -:  1631:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1632:  (void)EventRecord2(EvtRtxMutexGetOwner, (uint32_t)mutex_id, (uint32_t)thread_id);
+     -:  1633:#else
+     -:  1634:  (void)mutex_id;
+     -:  1635:  (void)thread_id;
+     -:  1636:#endif
+     -:  1637:}
+     -:  1638:#endif
+     -:  1639:
+     -:  1640:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_DELETE_DISABLE))
+     -:  1641:__WEAK void EvrRtxMutexDelete (osMutexId_t mutex_id) {
+     -:  1642:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1643:  (void)EventRecord2(EvtRtxMutexDelete, (uint32_t)mutex_id, 0U);
+     -:  1644:#else
+     -:  1645:  (void)mutex_id;
+     -:  1646:#endif
+ #####:  1647:}
+     -:  1648:#endif
+     -:  1649:
+     -:  1650:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MUTEX != 0) && !defined(EVR_RTX_MUTEX_DESTROYED_DISABLE))
+     -:  1651:__WEAK void EvrRtxMutexDestroyed (osMutexId_t mutex_id) {
+     -:  1652:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1653:  (void)EventRecord2(EvtRtxMutexDestroyed, (uint32_t)mutex_id, 0U);
+     -:  1654:#else
+     -:  1655:  (void)mutex_id;
+     -:  1656:#endif
+ #####:  1657:}
+     -:  1658:#endif
+     -:  1659:
+     -:  1660:
+     -:  1661://  ==== Semaphore Events ====
+     -:  1662:
+     -:  1663:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_ERROR_DISABLE))
+     -:  1664:__WEAK void EvrRtxSemaphoreError (osSemaphoreId_t semaphore_id, int32_t status) {
+     -:  1665:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1666:  (void)EventRecord2(EvtRtxSemaphoreError, (uint32_t)semaphore_id, (uint32_t)status);
+     -:  1667:#else
+     -:  1668:  (void)semaphore_id;
+     -:  1669:  (void)status;
+     -:  1670:#endif
+     -:  1671:}
+     -:  1672:#endif
+     -:  1673:
+     -:  1674:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_NEW_DISABLE))
+     -:  1675:__WEAK void EvrRtxSemaphoreNew (uint32_t max_count, uint32_t initial_count, const osSemaphoreAttr_t *attr) {
+     -:  1676:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1677:  (void)EventRecord4(EvtRtxSemaphoreNew, max_count, initial_count, (uint32_t)attr, 0U);
+     -:  1678:#else
+     -:  1679:  (void)max_count;
+     -:  1680:  (void)initial_count;
+     -:  1681:  (void)attr;
+     -:  1682:#endif
+     -:  1683:}
+     -:  1684:#endif
+     -:  1685:
+     -:  1686:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_CREATED_DISABLE))
+     -:  1687:__WEAK void EvrRtxSemaphoreCreated (osSemaphoreId_t semaphore_id, const char *name) {
+     -:  1688:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1689:  (void)EventRecord2(EvtRtxSemaphoreCreated, (uint32_t)semaphore_id, (uint32_t)name);
+     -:  1690:#else
+     -:  1691:  (void)semaphore_id;
+     -:  1692:  (void)name;
+     -:  1693:#endif
+     -:  1694:}
+     -:  1695:#endif
+     -:  1696:
+     -:  1697:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_GET_NAME_DISABLE))
+     -:  1698:__WEAK void EvrRtxSemaphoreGetName (osSemaphoreId_t semaphore_id, const char *name) {
+     -:  1699:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1700:  (void)EventRecord2(EvtRtxSemaphoreGetName, (uint32_t)semaphore_id, (uint32_t)name);
+     -:  1701:#else
+     -:  1702:#endif
+     -:  1703:  (void)semaphore_id;
+     -:  1704:  (void)name;
+     -:  1705:}
+     -:  1706:#endif
+     -:  1707:
+     -:  1708:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_ACQUIRE_DISABLE))
+     -:  1709:__WEAK void EvrRtxSemaphoreAcquire (osSemaphoreId_t semaphore_id, uint32_t timeout) {
+     -:  1710:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1711:  (void)EventRecord2(EvtRtxSemaphoreAcquire, (uint32_t)semaphore_id, timeout);
+     -:  1712:#else
+     -:  1713:  (void)semaphore_id;
+     -:  1714:  (void)timeout;
+     -:  1715:#endif
+     -:  1716:}
+     -:  1717:#endif
+     -:  1718:
+     -:  1719:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_ACQUIRE_PENDING_DISABLE))
+     -:  1720:__WEAK void EvrRtxSemaphoreAcquirePending (osSemaphoreId_t semaphore_id, uint32_t timeout) {
+     -:  1721:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1722:  (void)EventRecord2(EvtRtxSemaphoreAcquirePending, (uint32_t)semaphore_id, (uint32_t)timeout);
+     -:  1723:#else
+     -:  1724:  (void)semaphore_id;
+     -:  1725:  (void)timeout;
+     -:  1726:#endif
+     -:  1727:}
+     -:  1728:#endif
+     -:  1729:
+     -:  1730:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_ACQUIRE_TIMEOUT_DISABLE))
+     -:  1731:__WEAK void EvrRtxSemaphoreAcquireTimeout (osSemaphoreId_t semaphore_id) {
+     -:  1732:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1733:  (void)EventRecord2(EvtRtxSemaphoreAcquireTimeout, (uint32_t)semaphore_id, 0U);
+     -:  1734:#else
+     -:  1735:  (void)semaphore_id;
+     -:  1736:#endif
+ #####:  1737:}
+     -:  1738:#endif
+     -:  1739:
+     -:  1740:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_ACQUIRED_DISABLE))
+     -:  1741:__WEAK void EvrRtxSemaphoreAcquired (osSemaphoreId_t semaphore_id, uint32_t tokens) {
+     -:  1742:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1743:  (void)EventRecord2(EvtRtxSemaphoreAcquired, (uint32_t)semaphore_id, tokens);
+     -:  1744:#else
+     -:  1745:  (void)semaphore_id;
+     -:  1746:  (void)tokens;
+     -:  1747:#endif
+     -:  1748:}
+     -:  1749:#endif
+     -:  1750:
+     -:  1751:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_NOT_ACQUIRED_DISABLE))
+     -:  1752:__WEAK void EvrRtxSemaphoreNotAcquired (osSemaphoreId_t semaphore_id) {
+     -:  1753:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1754:  (void)EventRecord2(EvtRtxSemaphoreNotAcquired, (uint32_t)semaphore_id, 0U);
+     -:  1755:#else
+     -:  1756:  (void)semaphore_id;
+     -:  1757:#endif
+     -:  1758:}
+     -:  1759:#endif
+     -:  1760:
+     -:  1761:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_RELEASE_DISABLE))
+     -:  1762:__WEAK void EvrRtxSemaphoreRelease (osSemaphoreId_t semaphore_id) {
+     -:  1763:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1764:  (void)EventRecord2(EvtRtxSemaphoreRelease, (uint32_t)semaphore_id, 0U);
+     -:  1765:#else
+     -:  1766:  (void)semaphore_id;
+     -:  1767:#endif
+     -:  1768:}
+     -:  1769:#endif
+     -:  1770:
+     -:  1771:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_RELEASED_DISABLE))
+     -:  1772:__WEAK void EvrRtxSemaphoreReleased (osSemaphoreId_t semaphore_id, uint32_t tokens) {
+     -:  1773:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1774:  (void)EventRecord2(EvtRtxSemaphoreReleased, (uint32_t)semaphore_id, tokens);
+     -:  1775:#else
+     -:  1776:  (void)semaphore_id;
+     -:  1777:  (void)tokens;
+     -:  1778:#endif
+     -:  1779:}
+     -:  1780:#endif
+     -:  1781:
+     -:  1782:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_GET_COUNT_DISABLE))
+     -:  1783:__WEAK void EvrRtxSemaphoreGetCount (osSemaphoreId_t semaphore_id, uint32_t count) {
+     -:  1784:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1785:  (void)EventRecord2(EvtRtxSemaphoreGetCount, (uint32_t)semaphore_id, count);
+     -:  1786:#else
+     -:  1787:  (void)semaphore_id;
+     -:  1788:  (void)count;
+     -:  1789:#endif
+     -:  1790:}
+     -:  1791:#endif
+     -:  1792:
+     -:  1793:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_DELETE_DISABLE))
+     -:  1794:__WEAK void EvrRtxSemaphoreDelete (osSemaphoreId_t semaphore_id) {
+     -:  1795:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1796:  (void)EventRecord2(EvtRtxSemaphoreDelete, (uint32_t)semaphore_id, 0U);
+     -:  1797:#else
+     -:  1798:  (void)semaphore_id;
+     -:  1799:#endif
+     -:  1800:}
+     -:  1801:#endif
+     -:  1802:
+     -:  1803:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_SEMAPHORE != 0) && !defined(EVR_RTX_SEMAPHORE_DESTROYED_DISABLE))
+     -:  1804:__WEAK void EvrRtxSemaphoreDestroyed (osSemaphoreId_t semaphore_id) {
+     -:  1805:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1806:  (void)EventRecord2(EvtRtxSemaphoreDestroyed, (uint32_t)semaphore_id, 0U);
+     -:  1807:#else
+     -:  1808:  (void)semaphore_id;
+     -:  1809:#endif
+     -:  1810:}
+     -:  1811:#endif
+     -:  1812:
+     -:  1813:
+     -:  1814://  ==== Memory Pool Events ====
+     -:  1815:
+     -:  1816:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ERROR_DISABLE))
+     -:  1817:__WEAK void EvrRtxMemoryPoolError (osMemoryPoolId_t mp_id, int32_t status) {
+     -:  1818:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1819:  (void)EventRecord2(EvtRtxMemoryPoolError, (uint32_t)mp_id, (uint32_t)status);
+     -:  1820:#else
+     -:  1821:  (void)mp_id;
+     -:  1822:  (void)status;
+     -:  1823:#endif
+     -:  1824:}
+     -:  1825:#endif
+     -:  1826:
+     -:  1827:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_NEW_DISABLE))
+     -:  1828:__WEAK void EvrRtxMemoryPoolNew (uint32_t block_count, uint32_t block_size, const osMemoryPoolAttr_t *attr) {
+     -:  1829:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1830:  (void)EventRecord4(EvtRtxMemoryPoolNew, block_count, block_size, (uint32_t)attr, 0U);
+     -:  1831:#else
+     -:  1832:  (void)block_count;
+     -:  1833:  (void)block_size;
+     -:  1834:  (void)attr;
+     -:  1835:#endif
+     -:  1836:}
+     -:  1837:#endif
+     -:  1838:
+     -:  1839:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_CREATED_DISABLE))
+     -:  1840:__WEAK void EvrRtxMemoryPoolCreated (osMemoryPoolId_t mp_id, const char *name) {
+     -:  1841:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1842:  (void)EventRecord2(EvtRtxMemoryPoolCreated, (uint32_t)mp_id, (uint32_t)name);
+     -:  1843:#else
+     -:  1844:  (void)mp_id;
+     -:  1845:  (void)name;
+     -:  1846:#endif
+     -:  1847:}
+     -:  1848:#endif
+     -:  1849:
+     -:  1850:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_GET_NAME_DISABLE))
+     -:  1851:__WEAK void EvrRtxMemoryPoolGetName (osMemoryPoolId_t mp_id, const char *name) {
+     -:  1852:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1853:  (void)EventRecord2(EvtRtxMemoryPoolGetName, (uint32_t)mp_id, (uint32_t)name);
+     -:  1854:#else
+     -:  1855:  (void)mp_id;
+     -:  1856:  (void)name;
+     -:  1857:#endif
+     -:  1858:}
+     -:  1859:#endif
+     -:  1860:
+     -:  1861:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ALLOC_DISABLE))
+     -:  1862:__WEAK void EvrRtxMemoryPoolAlloc (osMemoryPoolId_t mp_id, uint32_t timeout) {
+     -:  1863:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1864:  (void)EventRecord2(EvtRtxMemoryPoolAlloc, (uint32_t)mp_id, timeout);
+     -:  1865:#else
+     -:  1866:  (void)mp_id;
+     -:  1867:  (void)timeout;
+     -:  1868:#endif
+     -:  1869:}
+     -:  1870:#endif
+     -:  1871:
+     -:  1872:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ALLOC_PENDING_DISABLE))
+     -:  1873:__WEAK void EvrRtxMemoryPoolAllocPending (osMemoryPoolId_t mp_id, uint32_t timeout) {
+     -:  1874:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1875:  (void)EventRecord2(EvtRtxMemoryPoolAllocPending, (uint32_t)mp_id, timeout);
+     -:  1876:#else
+     -:  1877:  (void)mp_id;
+     -:  1878:  (void)timeout;
+     -:  1879:#endif
+     -:  1880:}
+     -:  1881:#endif
+     -:  1882:
+     -:  1883:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ALLOC_TIMEOUT_DISABLE))
+     -:  1884:__WEAK void EvrRtxMemoryPoolAllocTimeout (osMemoryPoolId_t mp_id) {
+     -:  1885:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1886:  (void)EventRecord2(EvtRtxMemoryPoolAllocTimeout, (uint32_t)mp_id, 0U);
+     -:  1887:#else
+     -:  1888:  (void)mp_id;
+     -:  1889:#endif
+ #####:  1890:}
+     -:  1891:#endif
+     -:  1892:
+     -:  1893:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ALLOCATED_DISABLE))
+     -:  1894:__WEAK void EvrRtxMemoryPoolAllocated (osMemoryPoolId_t mp_id, void *block) {
+     -:  1895:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1896:  (void)EventRecord2(EvtRtxMemoryPoolAllocated, (uint32_t)mp_id, (uint32_t)block);
+     -:  1897:#else
+     -:  1898:  (void)mp_id;
+     -:  1899:  (void)block;
+     -:  1900:#endif
+     -:  1901:}
+     -:  1902:#endif
+     -:  1903:
+     -:  1904:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_ALLOC_FAILED_DISABLE))
+     -:  1905:__WEAK void EvrRtxMemoryPoolAllocFailed (osMemoryPoolId_t mp_id) {
+     -:  1906:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1907:  (void)EventRecord2(EvtRtxMemoryPoolAllocFailed, (uint32_t)mp_id, 0U);
+     -:  1908:#else
+     -:  1909:  (void)mp_id;
+     -:  1910:#endif
+     -:  1911:}
+     -:  1912:#endif
+     -:  1913:
+     -:  1914:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_FREE_DISABLE))
+     -:  1915:__WEAK void EvrRtxMemoryPoolFree (osMemoryPoolId_t mp_id, void *block) {
+     -:  1916:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1917:  (void)EventRecord2(EvtRtxMemoryPoolFree, (uint32_t)mp_id, (uint32_t)block);
+     -:  1918:#else
+     -:  1919:  (void)mp_id;
+     -:  1920:  (void)block;
+     -:  1921:#endif
+     -:  1922:}
+     -:  1923:#endif
+     -:  1924:
+     -:  1925:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_DEALLOCATED_DISABLE))
+     -:  1926:__WEAK void EvrRtxMemoryPoolDeallocated (osMemoryPoolId_t mp_id, void *block) {
+     -:  1927:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1928:  (void)EventRecord2(EvtRtxMemoryPoolDeallocated, (uint32_t)mp_id, (uint32_t)block);
+     -:  1929:#else
+     -:  1930:  (void)mp_id;
+     -:  1931:  (void)block;
+     -:  1932:#endif
+     -:  1933:}
+     -:  1934:#endif
+     -:  1935:
+     -:  1936:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_FREE_FAILED_DISABLE))
+     -:  1937:__WEAK void EvrRtxMemoryPoolFreeFailed (osMemoryPoolId_t mp_id, void *block) {
+     -:  1938:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1939:  (void)EventRecord2(EvtRtxMemoryPoolFreeFailed, (uint32_t)mp_id, (uint32_t)block);
+     -:  1940:#else
+     -:  1941:  (void)mp_id;
+     -:  1942:  (void)block;
+     -:  1943:#endif
+     -:  1944:}
+     -:  1945:#endif
+     -:  1946:
+     -:  1947:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_GET_CAPACITY_DISABLE))
+     -:  1948:__WEAK void EvrRtxMemoryPoolGetCapacity (osMemoryPoolId_t mp_id, uint32_t capacity) {
+     -:  1949:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1950:  (void)EventRecord2(EvtRtxMemoryPoolGetCapacity, (uint32_t)mp_id, capacity);
+     -:  1951:#else
+     -:  1952:  (void)mp_id;
+     -:  1953:  (void)capacity;
+     -:  1954:#endif
+     -:  1955:}
+     -:  1956:#endif
+     -:  1957:
+     -:  1958:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_GET_BLOCK_SZIE_DISABLE))
+     -:  1959:__WEAK void EvrRtxMemoryPoolGetBlockSize (osMemoryPoolId_t mp_id, uint32_t block_size) {
+     -:  1960:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1961:  (void)EventRecord2(EvtRtxMemoryPoolGetBlockSize, (uint32_t)mp_id, block_size);
+     -:  1962:#else
+     -:  1963:  (void)mp_id;
+     -:  1964:  (void)block_size;
+     -:  1965:#endif
+     -:  1966:}
+     -:  1967:#endif
+     -:  1968:
+     -:  1969:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_GET_COUNT_DISABLE))
+     -:  1970:__WEAK void EvrRtxMemoryPoolGetCount (osMemoryPoolId_t mp_id, uint32_t count) {
+     -:  1971:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1972:  (void)EventRecord2(EvtRtxMemoryPoolGetCount, (uint32_t)mp_id, count);
+     -:  1973:#else
+     -:  1974:  (void)mp_id;
+     -:  1975:  (void)count;
+     -:  1976:#endif
+     -:  1977:}
+     -:  1978:#endif
+     -:  1979:
+     -:  1980:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_GET_SPACE_DISABLE))
+     -:  1981:__WEAK void EvrRtxMemoryPoolGetSpace (osMemoryPoolId_t mp_id, uint32_t space) {
+     -:  1982:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1983:  (void)EventRecord2(EvtRtxMemoryPoolGetSpace, (uint32_t)mp_id, space);
+     -:  1984:#else
+     -:  1985:  (void)mp_id;
+     -:  1986:  (void)space;
+     -:  1987:#endif
+     -:  1988:}
+     -:  1989:#endif
+     -:  1990:
+     -:  1991:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_DELETE_DISABLE))
+     -:  1992:__WEAK void EvrRtxMemoryPoolDelete (osMemoryPoolId_t mp_id) {
+     -:  1993:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  1994:  (void)EventRecord2(EvtRtxMemoryPoolDelete, (uint32_t)mp_id, 0U);
+     -:  1995:#else
+     -:  1996:  (void)mp_id;
+     -:  1997:#endif
+     -:  1998:}
+     -:  1999:#endif
+     -:  2000:
+     -:  2001:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MEMPOOL != 0) && !defined(EVR_RTX_MEMORY_POOL_DESTROYED_DISABLE))
+     -:  2002:__WEAK void EvrRtxMemoryPoolDestroyed (osMemoryPoolId_t mp_id) {
+     -:  2003:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2004:  (void)EventRecord2(EvtRtxMemoryPoolDestroyed, (uint32_t)mp_id, 0U);
+     -:  2005:#else
+     -:  2006:  (void)mp_id;
+     -:  2007:#endif
+     -:  2008:}
+     -:  2009:#endif
+     -:  2010:
+     -:  2011:
+     -:  2012://  ==== Message Queue Events ====
+     -:  2013:
+     -:  2014:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_ERROR_DISABLE))
+     -:  2015:__WEAK void EvrRtxMessageQueueError (osMessageQueueId_t mq_id, int32_t status) {
+     -:  2016:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2017:  (void)EventRecord2 (EvtRtxMessageQueueError, (uint32_t)mq_id, (uint32_t)status);
+     -:  2018:#else
+     -:  2019:  (void)mq_id;
+     -:  2020:  (void)status;
+     -:  2021:#endif
+ #####:  2022:}
+     -:  2023:#endif
+     -:  2024:
+     -:  2025:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_NEW_DISABLE))
+     -:  2026:__WEAK void EvrRtxMessageQueueNew (uint32_t msg_count, uint32_t msg_size, const osMessageQueueAttr_t *attr) {
+     -:  2027:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2028:  (void)EventRecord4(EvtRtxMessageQueueNew, msg_count, msg_size, (uint32_t)attr, 0U);
+     -:  2029:#else
+     -:  2030:  (void)msg_count;
+     -:  2031:  (void)msg_size;
+     -:  2032:  (void)attr;
+     -:  2033:#endif
+     -:  2034:}
+     -:  2035:#endif
+     -:  2036:
+     -:  2037:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_CREATED_DISABLE))
+     -:  2038:__WEAK void EvrRtxMessageQueueCreated (osMessageQueueId_t mq_id, const char *name) {
+     -:  2039:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2040:  (void)EventRecord2(EvtRtxMessageQueueCreated, (uint32_t)mq_id, (uint32_t)name);
+     -:  2041:#else
+     -:  2042:  (void)mq_id;
+     -:  2043:  (void)name;
+     -:  2044:#endif
+     1:  2045:}
+     -:  2046:#endif
+     -:  2047:
+     -:  2048:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_NAME_DISABLE))
+     -:  2049:__WEAK void EvrRtxMessageQueueGetName (osMessageQueueId_t mq_id, const char *name) {
+     -:  2050:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2051:  (void)EventRecord2(EvtRtxMessageQueueGetName, (uint32_t)mq_id, (uint32_t)name);
+     -:  2052:#else
+     -:  2053:  (void)mq_id;
+     -:  2054:  (void)name;
+     -:  2055:#endif
+     -:  2056:}
+     -:  2057:#endif
+     -:  2058:
+     -:  2059:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_PUT_DISABLE))
+     -:  2060:__WEAK void EvrRtxMessageQueuePut (osMessageQueueId_t mq_id, const void *msg_ptr, uint8_t msg_prio, uint32_t timeout) {
+     -:  2061:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2062:  (void)EventRecord4(EvtRtxMessageQueuePut, (uint32_t)mq_id, (uint32_t)msg_ptr, (uint32_t)msg_prio, timeout);
+     -:  2063:#else
+     -:  2064:  (void)mq_id;
+     -:  2065:  (void)msg_ptr;
+     -:  2066:  (void)msg_prio;
+     -:  2067:  (void)timeout;
+     -:  2068:#endif
+ #####:  2069:}
+     -:  2070:#endif
+     -:  2071:
+     -:  2072:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_PUT_PENDING_DISABLE))
+     -:  2073:__WEAK void EvrRtxMessageQueuePutPending (osMessageQueueId_t mq_id, const void *msg_ptr, uint32_t timeout) {
+     -:  2074:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2075:  (void)EventRecord4(EvtRtxMessageQueuePutPending, (uint32_t)mq_id, (uint32_t)msg_ptr, timeout, 0U);
+     -:  2076:#else
+     -:  2077:  (void)mq_id;
+     -:  2078:  (void)msg_ptr;
+     -:  2079:  (void)timeout;
+     -:  2080:#endif
+ #####:  2081:}
+     -:  2082:#endif
+     -:  2083:
+     -:  2084:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_PUT_TIMEOUT_DISABLE))
+     -:  2085:__WEAK void EvrRtxMessageQueuePutTimeout (osMessageQueueId_t mq_id) {
+     -:  2086:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2087:  (void)EventRecord2(EvtRtxMessageQueuePutTimeout, (uint32_t)mq_id, 0U);
+     -:  2088:#else
+     -:  2089:  (void)mq_id;
+     -:  2090:#endif
+ #####:  2091:}
+     -:  2092:#endif
+     -:  2093:
+     -:  2094:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_INSERT_PENDING_DISABLE))
+     -:  2095:__WEAK void EvrRtxMessageQueueInsertPending (osMessageQueueId_t mq_id, const void *msg_ptr) {
+     -:  2096:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2097:  (void)EventRecord2(EvtRtxMessageQueueInsertPending, (uint32_t)mq_id, (uint32_t)msg_ptr);
+     -:  2098:#else
+     -:  2099:  (void)mq_id;
+     -:  2100:  (void)msg_ptr;
+     -:  2101:#endif
+ #####:  2102:}
+     -:  2103:#endif
+     -:  2104:
+     -:  2105:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_INSERTED_DISABLE))
+     -:  2106:__WEAK void EvrRtxMessageQueueInserted (osMessageQueueId_t mq_id, const void *msg_ptr) {
+     -:  2107:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2108:  (void)EventRecord2(EvtRtxMessageQueueInserted, (uint32_t)mq_id, (uint32_t)msg_ptr);
+     -:  2109:#else
+     -:  2110:  (void)mq_id;
+     -:  2111:  (void)msg_ptr;
+     -:  2112:#endif
+ #####:  2113:}
+     -:  2114:#endif
+     -:  2115:
+     -:  2116:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_NOT_INSERTED_DISABLE))
+     -:  2117:__WEAK void EvrRtxMessageQueueNotInserted (osMessageQueueId_t mq_id, const void *msg_ptr) {
+     -:  2118:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2119:  (void)EventRecord2(EvtRtxMessageQueueNotInserted, (uint32_t)mq_id, (uint32_t)msg_ptr);
+     -:  2120:#else
+     -:  2121:  (void)mq_id;
+     -:  2122:  (void)msg_ptr;
+     -:  2123:#endif
+ #####:  2124:}
+     -:  2125:#endif
+     -:  2126:
+     -:  2127:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_DISABLE))
+     -:  2128:__WEAK void EvrRtxMessageQueueGet (osMessageQueueId_t mq_id, void *msg_ptr, uint8_t *msg_prio, uint32_t timeout) {
+     -:  2129:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2130:  (void)EventRecord4(EvtRtxMessageQueueGet, (uint32_t)mq_id, (uint32_t)msg_ptr, (uint32_t)msg_prio, timeout);
+     -:  2131:#else
+     -:  2132:  (void)mq_id;
+     -:  2133:  (void)msg_ptr;
+     -:  2134:  (void)msg_prio;
+     -:  2135:  (void)timeout;
+     -:  2136:#endif
+     1:  2137:}
+     -:  2138:#endif
+     -:  2139:
+     -:  2140:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_PENDING_DISABLE))
+     -:  2141:__WEAK void EvrRtxMessageQueueGetPending (osMessageQueueId_t mq_id, void *msg_ptr, uint32_t timeout) {
+     -:  2142:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2143:  (void)EventRecord4(EvtRtxMessageQueueGetPending, (uint32_t)mq_id, (uint32_t)msg_ptr, timeout, 0U);
+     -:  2144:#else
+     -:  2145:  (void)mq_id;
+     -:  2146:  (void)msg_ptr;
+     -:  2147:  (void)timeout;
+     -:  2148:#endif
+     1:  2149:}
+     -:  2150:#endif
+     -:  2151:
+     -:  2152:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_TIMEOUT_DISABLE))
+     -:  2153:__WEAK void EvrRtxMessageQueueGetTimeout (osMessageQueueId_t mq_id) {
+     -:  2154:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2155:  (void)EventRecord2(EvtRtxMessageQueueGetTimeout, (uint32_t)mq_id, 0U);
+     -:  2156:#else
+     -:  2157:  (void)mq_id;
+     -:  2158:#endif
+ #####:  2159:}
+     -:  2160:#endif
+     -:  2161:
+     -:  2162:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_RETRIEVED_DISABLE))
+     -:  2163:__WEAK void EvrRtxMessageQueueRetrieved (osMessageQueueId_t mq_id, void *msg_ptr) {
+     -:  2164:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2165:  (void)EventRecord2(EvtRtxMessageQueueRetrieved, (uint32_t)mq_id, (uint32_t)msg_ptr);
+     -:  2166:#else
+     -:  2167:  (void)mq_id;
+     -:  2168:  (void)msg_ptr;
+     -:  2169:#endif
+ #####:  2170:}
+     -:  2171:#endif
+     -:  2172:
+     -:  2173:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_NOT_RETRIEVED_DISABLE))
+     -:  2174:__WEAK void EvrRtxMessageQueueNotRetrieved (osMessageQueueId_t mq_id, void *msg_ptr) {
+     -:  2175:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2176:  (void)EventRecord2(EvtRtxMessageQueueNotRetrieved, (uint32_t)mq_id, (uint32_t)msg_ptr);
+     -:  2177:#else
+     -:  2178:  (void)mq_id;
+     -:  2179:  (void)msg_ptr;
+     -:  2180:#endif
+ #####:  2181:}
+     -:  2182:#endif
+     -:  2183:
+     -:  2184:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_CAPACITY_DISABLE))
+     -:  2185:__WEAK void EvrRtxMessageQueueGetCapacity (osMessageQueueId_t mq_id, uint32_t capacity) {
+     -:  2186:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2187:  (void)EventRecord2(EvtRtxMessageQueueGetCapacity, (uint32_t)mq_id, capacity);
+     -:  2188:#else
+     -:  2189:  (void)mq_id;
+     -:  2190:  (void)capacity;
+     -:  2191:#endif
+     -:  2192:}
+     -:  2193:#endif
+     -:  2194:
+     -:  2195:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_MSG_SIZE_DISABLE))
+     -:  2196:__WEAK void EvrRtxMessageQueueGetMsgSize (osMessageQueueId_t mq_id, uint32_t msg_size) {
+     -:  2197:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2198:  (void)EventRecord2(EvtRtxMessageQueueGetMsgSize, (uint32_t)mq_id, msg_size);
+     -:  2199:#else
+     -:  2200:  (void)mq_id;
+     -:  2201:  (void)msg_size;
+     -:  2202:#endif
+     -:  2203:}
+     -:  2204:#endif
+     -:  2205:
+     -:  2206:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_COUNT_DISABLE))
+     -:  2207:__WEAK void EvrRtxMessageQueueGetCount (osMessageQueueId_t mq_id, uint32_t count) {
+     -:  2208:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2209:  (void)EventRecord2(EvtRtxMessageQueueGetCount, (uint32_t)mq_id, count);
+     -:  2210:#else
+     -:  2211:  (void)mq_id;
+     -:  2212:  (void)count;
+     -:  2213:#endif
+     -:  2214:}
+     -:  2215:#endif
+     -:  2216:
+     -:  2217:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_GET_SPACE_DISABLE))
+     -:  2218:__WEAK void EvrRtxMessageQueueGetSpace (osMessageQueueId_t mq_id, uint32_t space) {
+     -:  2219:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2220:  (void)EventRecord2(EvtRtxMessageQueueGetSpace, (uint32_t)mq_id, space);
+     -:  2221:#else
+     -:  2222:  (void)mq_id;
+     -:  2223:  (void)space;
+     -:  2224:#endif
+     -:  2225:}
+     -:  2226:#endif
+     -:  2227:
+     -:  2228:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_RESET_DISABLE))
+     -:  2229:__WEAK void EvrRtxMessageQueueReset (osMessageQueueId_t mq_id) {
+     -:  2230:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2231:  (void)EventRecord2(EvtRtxMessageQueueReset, (uint32_t)mq_id, 0U);
+     -:  2232:#else
+     -:  2233:  (void)mq_id;
+     -:  2234:#endif
+     -:  2235:}
+     -:  2236:#endif
+     -:  2237:
+     -:  2238:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_RESET_DONE_DISABLE))
+     -:  2239:__WEAK void EvrRtxMessageQueueResetDone (osMessageQueueId_t mq_id) {
+     -:  2240:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2241:  (void)EventRecord2(EvtRtxMessageQueueResetDone, (uint32_t)mq_id, 0U);
+     -:  2242:#else
+     -:  2243:  (void)mq_id;
+     -:  2244:#endif
+     -:  2245:}
+     -:  2246:#endif
+     -:  2247:
+     -:  2248:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_DELETE_DISABLE))
+     -:  2249:__WEAK void EvrRtxMessageQueueDelete (osMessageQueueId_t mq_id) {
+     -:  2250:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2251:  (void)EventRecord2(EvtRtxMessageQueueDelete, (uint32_t)mq_id, 0U);
+     -:  2252:#else
+     -:  2253:  (void)mq_id;
+     -:  2254:#endif
+     -:  2255:}
+     -:  2256:#endif
+     -:  2257:
+     -:  2258:#if (!defined(EVR_RTX_DISABLE) && (OS_EVR_MSGQUEUE != 0) && !defined(EVR_RTX_MESSAGE_QUEUE_DESTROYED_DISABLE))
+     -:  2259:__WEAK void EvrRtxMessageQueueDestroyed (osMessageQueueId_t mq_id) {
+     -:  2260:#if defined(RTE_CMSIS_View_EventRecorder)
+     -:  2261:  (void)EventRecord2(EvtRtxMessageQueueDestroyed, (uint32_t)mq_id, 0U);
+     -:  2262:#else
+     -:  2263:  (void)mq_id;
+     -:  2264:#endif
+     -:  2265:}
+     -:  2266:#endif
