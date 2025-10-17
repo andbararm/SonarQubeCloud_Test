@@ -118,8 +118,8 @@ int main (void) {
   osKernelStart();                      // Start thread execution
 
   //for (;;) {}
-LOOP:
-  goto LOOP;
+LOOP1:
+  goto LOOP1;
 }
 
 
