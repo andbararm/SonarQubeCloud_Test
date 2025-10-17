@@ -36,19 +36,19 @@ jobs:
       - name: Activate Arm tool license
         uses: ARM-software/cmsis-actions/armlm@v1
 
-      - name: Set ENV Variable
-        run: |
-          export CMAKE_EXPORT_COMPILE_COMMANDS_X=1
-          env
+#      - name: Set ENV Variable
+#        run: |
+#          export CMAKE_EXPORT_COMPILE_COMMANDS=1
+#          env
    
       - name: Build
         run: |
           echo "Building get started example ..."
           cbuild get_started.csolution.yml --packs --update-rte --context .debug+avh 
 
-      - name: List Dir
-        run: |
-          ls -la -R ./tmp
+ #     - name: List Dir
+ #       run: |
+ #         ls -la -R ./tmp
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v6
