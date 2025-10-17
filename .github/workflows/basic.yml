@@ -38,7 +38,7 @@ jobs:
 
       - name: Set ENV Variable
         run: |
-          export CMAKE_EXPORT_COMPILE_COMMANDS=1
+          export CMAKE_EXPORT_COMPILE_COMMANDS_X=1
           env
    
       - name: Build
