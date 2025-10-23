@@ -119,16 +119,6 @@ int main (void) {
 
   //for (;;) {}
 LOOP:
-  printf("0\n");
-  printf("1\n");
-  printf("2\n");
-  printf("3\n");
-  printf("4\n");
-  printf("5\n");
-  printf("6\n");
-  printf("7\n");
-  printf("8\n");
-  printf("9\n");
   printf("10\n");
   printf("11\n");
   printf("12\n");
@@ -139,7 +129,17 @@ LOOP:
   printf("17\n");
   printf("18\n");
   printf("19\n");
-  printf("20\n");
+  printf("110\n");
+  printf("111\n");
+  printf("112\n");
+  printf("113\n");
+  printf("114\n");
+  printf("115\n");
+  printf("116\n");
+  printf("117\n");
+  printf("118\n");
+  printf("119\n");
+  printf("120\n");
   goto LOOP;
 }
 
