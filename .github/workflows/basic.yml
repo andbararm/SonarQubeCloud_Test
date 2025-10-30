@@ -40,6 +40,7 @@ jobs:
         run: |
           touch predefined_macros.c
           armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h
+          echo "outputting predefined macros:"
           cat predefined_macros.h
 
 #      - name: Set ENV Variable
