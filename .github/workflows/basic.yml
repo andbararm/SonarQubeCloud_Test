@@ -36,6 +36,12 @@ jobs:
       - name: Activate Arm tool license
         uses: ARM-software/cmsis-actions/armlm@v1
 
+      - name: generate predefined macros include file
+        run: |
+          touch predefined_macros.c
+          armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h
+          cat predefined_macros.h
+
 #      - name: Set ENV Variable
 #        run: |
 #          export CMAKE_EXPORT_COMPILE_COMMANDS=1
@@ -49,13 +55,7 @@ jobs:
  #     - name: List Dir
  #       run: |
  #         ls -la -R ./tmp
-
-      - name: generate predefined macros include file
-        run: |
-          touch predefined_macros.c
-          armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c | tee predefined_macros.h
-          cat predefined_macros.h
-          
+     
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v6
         env:
