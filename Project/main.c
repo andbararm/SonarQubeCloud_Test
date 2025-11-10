@@ -118,17 +118,7 @@ int main (void) {
   osKernelStart();                      // Start thread execution
 
   //for (;;) {}
-LOOP:
-  printf("10\n");
-  printf("11\n");
-  printf("12\n");
-  printf("13\n");
-  printf("14\n");
-  printf("15\n");
-  printf("16\n");
-  printf("17\n");
-  printf("18\n");
-  printf("19\n");
+LOOP2:
   printf("110\n");
   printf("111\n");
   printf("112\n");
@@ -139,8 +129,18 @@ LOOP:
   printf("117\n");
   printf("118\n");
   printf("119\n");
-  printf("120\n");
-  goto LOOP;
+  printf("1110\n");
+  printf("1111\n");
+  printf("1112\n");
+  printf("1113\n");
+  printf("1114\n");
+  printf("1115\n");
+  printf("1116\n");
+  printf("1117\n");
+  printf("1118\n");
+  printf("1119\n");
+  printf("1120\n");
+  goto LOOP2;
 }
 
 
