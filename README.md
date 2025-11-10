@@ -1,91 +1,71 @@
-# AVH CI Template
+# SonarQube test
 
-This repository contains a **CI Template for unit test automation** that uses [GitHub Actions](https://github.com/features/actions) on a [GitHub-hosted runner](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners) with an Ubuntu Linux system. A report is optionally generated using  the [Unity test framework](https://github.com/MDK-Packs/Unity).
+This repositor is work in progress. The aim is to show how to use the SonarQube code checker to check a csolution project in a GitHub workflow.
+This project was created from the "Arm-Examples/AVH_CI_Template", so we only need to edit the existing workflow files.
 
-The tests run on [**Arm Virtual Hardware - Fixed Virtual Platforms (AVH-FVP)**](https://arm-software.github.io/AVH/main/simulation/html/index.html) which are simulation models that implement a Cortex-M, Corstone, or Cortex-M/Ethos-U device sub-systems. These models are designed for software verification and testing. It allows simulation-based test automation of various software workloads, including unit tests, integration tests, and fault injection.
+## Things done
+1) sing-up for the [free tier SonarQube Cloud account](https://www.sonarsource.com/products/sonarcloud/signup-free/) with the GitHub credentials. This should bring you to the SonarCloud web interface.
+2) In the SonarCloud web interface click the + and select "Analyze new project"
+3) On the next page one can click "Import an organization from GitHub", which registers the SonarQube GitHub app.
+4) This takes you back to SonarCloud, where you "Continue with free plan"
+5) Then click "Analyze new project" and you should be able to select one of your repos.
+6) When done, click "Set Up" on the right
+7) Choose the "new code" setting can continue.
+8) On the "Choose your Analysis Method" page, click on "With GitHub Actions".
+9) Follow the instrunction on how to create the GitHub Secret with your "SONAR_TOKEN" under "Repository secrets".
+10) Create a new file in the project root called "sonar-project.properties". It can contain:
 
-The tools used in this **CI Template** are part of [Keil MDK Version 6](https://www.keil.arm.com/keil-mdk/). For evaluation purposes the *MDK - Community Edition* can be used, but commericial usage requires a license of the *MDK - Professional Edition*.
-The tool installation is managed with [vcpkg](https://www.keil.arm.com/artifacts/) using a [configuration file](./vcpkg-configuration.json) that ensures consistent setup on Desktop computers and the CI system.
+a) sonar.projectKey=...
+This is your SonarQube project name, found in SonarCloud
 
-![Create, debug, and test](./create_debug_test.png)
+b) sonar.organization=...
+This is your SonarQube organization name, also found in SonarCloud
 
-## Usage
+c) sonar.sources=Project/
 
-This is a template repository that can be used as starting point for validation projects. Click **Use this template - Create a new repository** to start your own CI test project.
+SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this the scan is limited to the Project folder, where for this project the souce code is found.
 
-> Login with your GitHub account to enable the button **Use this template - Create a new repository**.
+d) sonar.qualitygate.wait=true
 
-The [Project](Project) tests a single function (*my_sum*) using the [Unity test framework](https://github.com/MDK-Packs/Unity) that is available as [CMSIS software pack](https://www.keil.arm.com/packs/unity-arm-packs). The initial configuration contains a "test case error" that exemplifies the Unity test reporting.
+Normally the SonarQube scanner will not make the GitHub action fail, if the Quality Gate requirements are not met. With this setting, it can be made fail.
 
-> This video contains a demo: [Using CMSIS-Toolbox and Keil MDK v6 in CI/CD Workflows](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1718006126984001DUAn)
+e) sonar.cfamily.gcov.reportsPath=coverage/
 
-### Repository Structure
+As for the free tier account the default Quality Gate also requires Code Coverage to be 80%, I faked this by running the project in the uVision debugger and created gcov files there and put them in this folder. So the scan can succeed.
 
-Directory                     | Content
-:-----------------------------|----------
-[.github/workflows](.github/workflows) | Workflow YML files that gets you started with GitHub Actions for CMSIS projects.
-[Project](Project)                     | A simple unit test application in [*csolution project format*](https://github.com/Open-CMSIS-Pack/cmsis-toolbox).
+f) sonar.coverage.exclusions= **/report.py
 
-### GitHub
+The SonarQube incldes by default all known source file formats to the Code Coverage value. In this case there is a python module in the source folder. With that, this python module is excluded from the Code Coverage.
 
-With GitHub Actions two workflows are available:
+g) sonar.cxx.forceIncludes=predefined_macros.h
 
-- [basic.yml](.github/workflows/basic.yml) compiles and runs the application.
-- [basic_w_report.yml](.github/workflows/basic_w_report.yml) compiles and runs the application; then generates a test report using [phoenix-actions/test-reporting](https://github.com/phoenix-actions/test-reporting).
+This is a method, to spcify a include file to be uses on evrey check of C source files. This can be used for Complier's predefined values.
 
-Use in the GitHub web interface the [*Actions*](/../../actions) view to execute the *CI test run* and get *Test results*.
+11) Things to add in the workflow file's "jobs:" section:
 
-### Desktop
+a) to create the Complier's predefined values, the compiler can be used like this:
 
-**Prerequisite:**
+      - name: generate predefined macros include file
+        run: |
+          touch predefined_macros.c
+          armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h 2>/dev/null
 
-- Install VS Code with [Arm Keil Studio Pack extensions](https://marketplace.visualstudio.com/items?itemName=Arm.keil-studio-pack).
-- Click **Use this template - Create a new repository** to create you own CI test flow in your GitHub account.
+b) cbuild (setup) will generate a compile_commands.json file:
 
-**Build:**
+      - name: Generate compile_commands.json
+        run: |
+          echo "Generate compile_commands.json ..."
+          cbuild setup get_started.csolution.yml --packs --update-rte --context .debug+avh
 
-In VS Code use:
+c) do the SonarQube scan:
 
-- Open *Source Control Activity Bar* and use *Clone Repository* to get  the application on your local computer.
-- Open *CMSIS Activity Bar* and *Build* the application.
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            --define sonar.cfamily.compile-commands=tmp/Project/avh/debug/compile_commands.json
 
-> **Note:**
->
-> When you open the project for the first time, the *Arm Tools Environment* managed with [vcpkg](https://www.keil.arm.com/artifacts/) gets installed which may take some minutes.
 
-**Run:**
-
-In VS Code open the *CMSIS Activity Bar* and *Run* the application.
-
-**Debug:**
-
-In VS Code open the *CMSIS Activity Bar* and *Debug* the application.
-
-## More CI Examples
-
-Arm is using CI validation tests for many projects. The list below are only a few examples that may be used to derive own CI test projects.
-
-Resource           | Description
-:------------------|:------------------
-[AVH-Hello](https://github.com/Arm-Examples/AVH-Hello) | Build and execution test for "Hello World" example using a GitHub Action matrix to target all Cortex-M processors, Arm Compiler or GCC, and AVH simulation.
-[CMSIS Version 6](https://github.com/ARM-software/CMSIS_6/actions) | Runs a CMSIS-Core validation test across the supported processors using multiple compilers.
-[RTOS2 Validation](https://github.com/ARM-software/CMSIS-RTX/actions) | Runs the CMSIS-RTOS2 validation across Keil RTX using source and library variants.
-[STM32H743I-EVAL_BSP](https://github.com/Open-CMSIS-Pack/STM32H743I-EVAL_BSP) | Build test of a Board Support Pack (BSP) with MDK-Middleware [Reference Applications](https://github.com/Open-CMSIS-Pack/cmsis-toolbox/blob/main/docs/ReferenceApplications.md) using Arm Compiler or GCC. The artifacts store the various example projects for testing on the hardware board.
-[TFL Micro Speech](https://github.com/arm-software/AVH-TFLmicrospeech) | This example project shows the Virtual Streaming Interface with Audio input and uses [software layers](https://github.com/Open-CMSIS-Pack/cmsis-toolbox/blob/main/docs/build-overview.md#software-layers) for retargeting.
-
-## Other Developer Resources
-
-Resource           | Description
-:------------------|:------------------
-[Documentation](https://arm-software.github.io/AVH/main/overview/html/index.html) | Is a comprehensive documentation about Arm Virtual Hardware.
-[Support Forum](https://community.arm.com/support-forums/f/arm-virtual-hardware-targets-forum) | Arm Virtual Hardware is supported via a forum. Your feedback will influence future roadmap.
-[AVH-MLOps](https://github.com/ARM-software/AVH-MLOps) | Shows the setup of a Docker container with foundation tools for CI and MLOps systems.
-[Marketing Overview](https://www.arm.com/virtual-hardware) | Gives you a top-level marketing message.
-
-## Related Webinar Recordings
-
-- [MDK v6 Technical Deep Dive](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1713958336497001CQIR)
-- [CLI builds using CMSIS-Toolbox](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1708432622207001feYV)
-- [Using CMSIS-Toolbox and Keil MDK v6 in CI/CD Workflows](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1718006126984001DUAn)
-- [Using CMSIS-View and CMSIS-Compiler](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1706872120089001ictY)
-- [Data streaming with CMSIS-Stream and SDS](https://on-demand.arm.com/flow/arm/devhub/sessionCatalog/page/pubSessCatalog/session/1709221848113001nOU5)
+12) When running a workflow this, the SonarQube scan is done and also makes the action fail, if it finds problems.
