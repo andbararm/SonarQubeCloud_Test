@@ -118,29 +118,39 @@ int main (void) {
   osKernelStart();                      // Start thread execution
 
   //for (;;) {}
-LOOP2:
-  printf("110\n");
-  printf("111\n");
-  printf("112\n");
-  printf("113\n");
-  printf("114\n");
-  printf("115\n");
-  printf("116\n");
-  printf("117\n");
-  printf("118\n");
-  printf("119\n");
-  printf("1110\n");
-  printf("1111\n");
-  printf("1112\n");
-  printf("1113\n");
-  printf("1114\n");
-  printf("1115\n");
-  printf("1116\n");
-  printf("1117\n");
-  printf("1118\n");
-  printf("1119\n");
-  printf("1120\n");
-  goto LOOP2;
+LOOP0:
+  printf("0\n");
+  printf("1\n");
+  printf("2\n");
+  printf("3\n");
+  printf("4\n");
+  printf("5\n");
+  printf("6\n");
+  printf("7\n");
+  printf("8\n");
+  printf("9\n");
+  printf("10\n");
+  printf("11\n");
+  printf("12\n");
+  printf("13\n");
+  printf("14\n");
+  printf("15\n");
+  printf("16\n");
+  printf("17\n");
+  printf("18\n");
+  printf("19\n");
+  printf("20\n");
+  printf("21\n");
+  printf("22\n");
+  printf("23\n");
+  printf("24\n");
+  printf("25\n");
+  printf("26\n");
+  printf("27\n");
+  printf("28\n");
+  printf("29\n");
+  printf("30\n");
+  goto LOOP0;
 }
 
 
