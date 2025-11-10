@@ -5,7 +5,7 @@ This project was created from the "Arm-Examples/AVH_CI_Template", so we only nee
 
 ## Things done
 1) sing-up for the [free tier SonarQube Cloud account](https://www.sonarsource.com/products/sonarcloud/signup-free/) with the GitHub credentials. This should bring you to the SonarCloud web interface.
-2) In the SonarCloud web interface click the + and select "Analyze new project"
+2) In the SonarCloud web interface click the + and select "Analyze new project".
 3) On the next page one can click "Import an organization from GitHub", which registers the SonarQube GitHub app.
 4) This takes you back to SonarCloud, where you "Continue with free plan"
 5) Then click "Analyze new project" and you should be able to select one of your repos.
@@ -21,13 +21,15 @@ This is your SonarQube project name, found in SonarCloud
 10.b) sonar.organization=...
 This is your SonarQube organization name, also found in SonarCloud
 
-10.c) sonar.sources=Project/
+10.c) SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this, the scan is limited to the Project folder, where for this project the source code is found.
 
-SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this the scan is limited to the Project folder, where for this project the souce code is found.
+sonar.sources=Project/
+
+
 
 10.d) sonar.qualitygate.wait=true
 
-Normally the SonarQube scanner will not make the GitHub action fail, if the Quality Gate requirements are not met. With this setting, it can be made fail.
+Normally, the SonarQube scanner will not make the GitHub action fail if the Quality Gate requirements are not met. With this setting, it can be made fail.
 
 10.e) sonar.cfamily.gcov.reportsPath=coverage/
 
