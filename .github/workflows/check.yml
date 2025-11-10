@@ -7,12 +7,55 @@ permissions:
   security-events: write
 
 jobs:
-  Check_with_SonarQube: 
+  CI_check: 
     runs-on: ubuntu-22.04
 
     steps:
-       
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'    
+
+      - name: Install system packages
+        run: |
+          sudo add-apt-repository ppa:deadsnakes/ppa
+          sudo apt-get install libpython3.9 libtinfo5
+
+      - name: Activate vcpkg
+        uses: ARM-software/cmsis-actions/vcpkg@v1
+
+      - name: Activate Arm tool license
+        uses: ARM-software/cmsis-actions/armlm@v1
+
       - name: generate predefined macros include file
         run: |
           touch predefined_macros.c
-          cat predefined_macros.h
+          armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h 2>/dev/null
+          #echo "outputting predefined macros:"
+          #cat predefined_macros.h
+
+#      - name: Set ENV Variable
+#        run: |
+#          export CMAKE_EXPORT_COMPILE_COMMANDS=1
+#          env
+   
+      - name: Generate compile_commands.json
+        run: |
+          echo "Generate compile_commands.json ..."
+          cbuild setup get_started.csolution.yml --packs --update-rte --context .debug+avh 
+
+ #     - name: List Dir
+ #       run: |
+ #         ls -la -R ./tmp
+     
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            --define sonar.cfamily.compile-commands=tmp/Project/avh/debug/compile_commands.json
+
