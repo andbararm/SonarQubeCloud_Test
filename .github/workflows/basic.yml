@@ -1,12 +1,12 @@
 name: Compile and Run
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  schedule:
-    - cron: '30 22 * * 0'
+#  pull_request:
+#    branches: [main]
+#  push:
+#    branches: [main]
+#  schedule:
+#    - cron: '30 22 * * 0'
 
 permissions: 
   actions: read
