@@ -15,49 +15,49 @@ This project was created from the "Arm-Examples/AVH_CI_Template", so we only nee
 9) Follow the instrunction on how to create the GitHub Secret with your "SONAR_TOKEN" under "Repository secrets".
 10) Create a new file in the project root called "sonar-project.properties". It can contain:
 
-a) sonar.projectKey=...
+10.a) sonar.projectKey=...
 This is your SonarQube project name, found in SonarCloud
 
-b) sonar.organization=...
+10.b) sonar.organization=...
 This is your SonarQube organization name, also found in SonarCloud
 
-c) sonar.sources=Project/
+10.c) sonar.sources=Project/
 
 SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this the scan is limited to the Project folder, where for this project the souce code is found.
 
-d) sonar.qualitygate.wait=true
+10.d) sonar.qualitygate.wait=true
 
 Normally the SonarQube scanner will not make the GitHub action fail, if the Quality Gate requirements are not met. With this setting, it can be made fail.
 
-e) sonar.cfamily.gcov.reportsPath=coverage/
+10.e) sonar.cfamily.gcov.reportsPath=coverage/
 
 As for the free tier account the default Quality Gate also requires Code Coverage to be 80%, I faked this by running the project in the uVision debugger and created gcov files there and put them in this folder. So the scan can succeed.
 
-f) sonar.coverage.exclusions= **/report.py
+10.f) sonar.coverage.exclusions= **/report.py
 
 The SonarQube incldes by default all known source file formats to the Code Coverage value. In this case there is a python module in the source folder. With that, this python module is excluded from the Code Coverage.
 
-g) sonar.cxx.forceIncludes=predefined_macros.h
+10.g) sonar.cxx.forceIncludes=predefined_macros.h
 
 This is a method, to spcify a include file to be uses on evrey check of C source files. This can be used for Complier's predefined values.
 
 11) Things to add in the workflow file's "jobs:" section:
 
-a) to create the Complier's predefined values, the compiler can be used like this:
+11.a) to create the Complier's predefined values, the compiler can be used like this:
 
       - name: generate predefined macros include file
         run: |
           touch predefined_macros.c
           armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h 2>/dev/null
 
-b) cbuild (setup) will generate a compile_commands.json file:
+11.b) cbuild (setup) will generate a compile_commands.json file:
 
       - name: Generate compile_commands.json
         run: |
           echo "Generate compile_commands.json ..."
           cbuild setup get_started.csolution.yml --packs --update-rte --context .debug+avh
 
-c) do the SonarQube scan:
+11.c) do the SonarQube scan:
 
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v6
