@@ -15,59 +15,58 @@ This project was created from the "Arm-Examples/AVH_CI_Template", so we only nee
 9) Follow the instrunction on how to create the GitHub Secret with your "SONAR_TOKEN" under "Repository secrets".
 10) Create a new file in the project root called "sonar-project.properties". It can contain:
 
-10.a) sonar.projectKey=...
-This is your SonarQube project name, found in SonarCloud
+    10.a) Replace the dots with your SonarQube project name, found in SonarCloud.
 
-10.b) sonar.organization=...
-This is your SonarQube organization name, also found in SonarCloud
+        sonar.projectKey=...
 
-10.c) SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this, the scan is limited to the Project folder, where for this project the source code is found.
+    10.b) Replace the dots with your SonarQube organization name, also found in SonarCloud.
 
-sonar.sources=Project/
+        sonar.organization=...
 
+    10.c) SonarQube scans by default all files in the folder, so also downloaded vcpkg artefacts and pack files. With this, the scan is limited to the Project folder, where for this project the source code is found.
 
+        sonar.sources=Project/
 
-10.d) sonar.qualitygate.wait=true
+    10.d) Normally, the SonarQube scanner will not make the GitHub action fail if the Quality Gate requirements are not met. With this setting, it can be made to fail. 
 
-Normally, the SonarQube scanner will not make the GitHub action fail if the Quality Gate requirements are not met. With this setting, it can be made fail.
+        sonar.qualitygate.wait=true
 
-10.e) sonar.cfamily.gcov.reportsPath=coverage/
+    10.e) As for the free tier account the default Quality Gate also requires Code Coverage to be 80%, I faked this by running the project in the uVision debugger to create gcov files there and put them in this folder. So the scan can succeed.
 
-As for the free tier account the default Quality Gate also requires Code Coverage to be 80%, I faked this by running the project in the uVision debugger and created gcov files there and put them in this folder. So the scan can succeed.
+        sonar.cfamily.gcov.reportsPath=coverage/
 
-10.f) sonar.coverage.exclusions= **/report.py
+    10.f) The SonarQube includes by default all known source file formats to the Code Coverage value. In this case, there is a python module in the source folder. With that, this python module is excluded from the Code Coverage.
 
-The SonarQube incldes by default all known source file formats to the Code Coverage value. In this case there is a python module in the source folder. With that, this python module is excluded from the Code Coverage.
+        sonar.coverage.exclusions= **/report.py
 
-10.g) sonar.cxx.forceIncludes=predefined_macros.h
+    10.g) This is a method to specify an include file to be used on every check of C source files. This can be used for Complier's predefined values.
 
-This is a method, to spcify a include file to be uses on evrey check of C source files. This can be used for Complier's predefined values.
+        sonar.cxx.forceIncludes=predefined_macros.h
 
 11) Things to add in the workflow file's "jobs:" section:
 
-11.a) to create the Complier's predefined values, the compiler can be used like this:
+    11.a) To create the Complier's predefined values, the compiler can be used like this:
 
-      - name: generate predefined macros include file
-        run: |
-          touch predefined_macros.c
-          armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h 2>/dev/null
+          - name: generate predefined macros include file
+            run: |
+              touch predefined_macros.c
+              armclang --target=arm-arm-none-eabi -dM -E predefined_macros.c 1>predefined_macros.h 2>/dev/null
 
-11.b) cbuild (setup) will generate a compile_commands.json file:
+    11.b) cbuild (setup) will generate a compile_commands.json file:
 
-      - name: Generate compile_commands.json
-        run: |
-          echo "Generate compile_commands.json ..."
-          cbuild setup get_started.csolution.yml --packs --update-rte --context .debug+avh
+          - name: Generate compile_commands.json
+            run: |
+              echo "Generate compile_commands.json ..."
+              cbuild setup get_started.csolution.yml --packs --update-rte --context .debug+avh
 
-11.c) do the SonarQube scan:
+    11.c) Do the SonarQube scan:
 
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            --define sonar.cfamily.compile-commands=tmp/Project/avh/debug/compile_commands.json
-
+          - name: SonarQube Scan
+            uses: sonarsource/sonarqube-scan-action@v6
+            env:
+              SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+            with:
+              args: >
+                --define sonar.cfamily.compile-commands=tmp/Project/avh/debug/compile_commands.json
 
 12) When running a workflow this, the SonarQube scan is done and also makes the action fail, if it finds problems.
